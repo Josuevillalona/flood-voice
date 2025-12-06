@@ -112,7 +112,18 @@ export function CallLogFeed() {
                                 {(log.recording_url || log.transcript) && (
                                     <div className="pt-2 mt-2 border-t border-slate-700/50 space-y-2">
                                         {log.recording_url && (
-                                            <audio controls className="w-full h-8 rounded opacity-80 hover:opacity-100 transition-opacity" src={log.recording_url} />
+                                            <div className="flex items-center gap-2">
+                                                <audio controls className="h-8 w-full rounded opacity-80 hover:opacity-100 transition-opacity" src={log.recording_url} />
+                                                <a
+                                                    href={log.recording_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-blue-400 transition-colors"
+                                                    title="Open Recording"
+                                                >
+                                                    <Play className="w-4 h-4" />
+                                                </a>
+                                            </div>
                                         )}
 
                                         {log.transcript && (
