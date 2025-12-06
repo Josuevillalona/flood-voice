@@ -128,11 +128,22 @@ export default function ResidentsPage() {
     const handleDelete = async (id: string, name: string) => {
         if (!confirm(`Are you sure you want to remove ${name}? This cannot be undone.`)) return;
 
+        // 1. Delete associated call logs first (Manual Cascade)
+        const { error: logsError } = await supabase.from('call_logs').delete().eq('resident_id', id);
+
+        if (logsError) {
+            console.error("Error deleting logs:", logsError);
+            // We continue even if logs error, in case there were no logs or constraint handles it, 
+            // but usually this clears the way.
+        }
+
+        // 2. Delete the resident
         const { error } = await supabase.from('residents').delete().eq('id', id);
+
         if (!error) {
             fetchResidents();
         } else {
-            alert("Error deleting: " + error.message);
+            alert("Error deleting resident: " + error.message);
         }
     };
 
