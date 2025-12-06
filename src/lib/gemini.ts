@@ -29,7 +29,7 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
 
     try {
         const model = genAI.getGenerativeModel({
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             generationConfig: { responseMimeType: "application/json" } // Force JSON
         });
 
@@ -68,8 +68,8 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
         const data = JSON.parse(text) as CallAnalysis;
         return data;
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Gemini Analysis Failed:", error);
-        return null;
+        throw new Error(`Gemini Error: ${error.message || error}`);
     }
 }

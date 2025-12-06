@@ -68,10 +68,10 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
         // Subscribe to real-time changes
         const subscription = supabase
             .channel('call_logs_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_logs' },
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'call_logs' },
                 (payload) => {
-                    console.log('New Call Log Arrived!', payload);
-                    fetchLogs(); // Quick refresh on new call
+                    console.log('Call Log Updated:', payload);
+                    fetchLogs(); // Refresh on Insert OR Update
                 }
             )
             .subscribe();
