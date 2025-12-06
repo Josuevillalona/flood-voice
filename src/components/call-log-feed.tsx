@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, CheckCircle, Activity, Phone } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Activity, Phone, Play, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Log = {
@@ -11,6 +11,8 @@ type Log = {
     resident_id: string;
     summary: string;
     risk_label: 'safe' | 'distress' | 'pending';
+    recording_url?: string;
+    transcript?: string;
     created_at: string;
     residents?: {
         name: string;
@@ -28,7 +30,6 @@ export function CallLogFeed() {
             .channel('realtime-logs')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_logs' }, (payload) => {
                 const newLog = payload.new as Log;
-                // We need to fetch the resident name for this new log since the realtime payload doesn't have joins
                 fetchLogWithResident(newLog.id).then(fullLog => {
                     if (fullLog) {
                         setLogs(prev => [fullLog, ...prev]);
@@ -50,7 +51,7 @@ export function CallLogFeed() {
             .limit(20);
 
         if (data) {
-            setLogs(data as any[]); // Type assertion needed due to join
+            setLogs(data as any[]);
         }
     };
 
@@ -95,14 +96,37 @@ export function CallLogFeed() {
                                     <CheckCircle className="w-4 h-4 text-green-500" />
                                 )}
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="font-bold text-white truncate">{log.residents?.name || 'Unknown'}</span>
-                                    <span className="text-xs opacity-50 whitespace-nowrap">{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                            <div className="flex-1 min-w-0 space-y-2">
+                                {/* Header */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="font-bold text-white truncate">{log.residents?.name || 'Unknown'}</span>
+                                        <span className="text-xs opacity-50 whitespace-nowrap">{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                                    </div>
+                                    <p className="leading-relaxed opacity-90 break-words">
+                                        {log.summary || "No summary provided."}
+                                    </p>
                                 </div>
-                                <p className="leading-relaxed opacity-90 break-words">
-                                    {log.summary || "No summary provided."}
-                                </p>
+
+                                {/* Artifacts: Audio & Transcript */}
+                                {(log.recording_url || log.transcript) && (
+                                    <div className="pt-2 mt-2 border-t border-slate-700/50 space-y-2">
+                                        {log.recording_url && (
+                                            <audio controls className="w-full h-8 rounded opacity-80 hover:opacity-100 transition-opacity" src={log.recording_url} />
+                                        )}
+
+                                        {log.transcript && (
+                                            <details className="group">
+                                                <summary className="cursor-pointer text-xs text-slate-500 hover:text-white flex items-center gap-1">
+                                                    <FileText className="w-3 h-3" /> View Transcript
+                                                </summary>
+                                                <p className="mt-2 text-xs text-slate-400 bg-slate-950/50 p-2 rounded whitespace-pre-wrap">
+                                                    {log.transcript}
+                                                </p>
+                                            </details>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))
