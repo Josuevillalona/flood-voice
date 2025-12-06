@@ -162,6 +162,25 @@ export default function ResidentsPage() {
     const handleUpdateStatus = async (id: string, newStatus: Resident['status']) => {
         const { error } = await supabase.from('residents').update({ status: newStatus }).eq('id', id);
         if (!error) {
+            // If manually marking as distress, send Telegram alert
+            if (newStatus === 'distress') {
+                const resident = residents.find(r => r.id === id);
+                if (resident) {
+                    try {
+                        await fetch('/api/telegram/send-alert', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                residentId: id,
+                                residentName: resident.name,
+                                source: 'manual'
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Failed to send Telegram alert:', e);
+                    }
+                }
+            }
             fetchResidents();
         } else {
             alert("Error updating status: " + error.message);
