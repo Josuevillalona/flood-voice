@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Phone, CheckCircle, Droplets } from 'lucide-react';
 import { FloodNetGraph } from '@/components/floodnet-graph';
+import { CallLogFeed } from '@/components/call-log-feed';
 
 // Mock Data for MVP visualization
 const MOCK_STATS = {
@@ -123,15 +124,9 @@ export default function DashboardHome() {
                     <FloodNetGraph />
                 </div>
 
-                {/* Right: Live Triage Feed (Placeholder for now) */}
-                <div className="glass-panel p-6 rounded-xl border border-white/5 flex flex-col">
-                    <div className="border-b border-white/5 pb-4 mb-4 flex justify-between items-center">
-                        <h3 className="font-semibold text-lg text-white">Live Logs</h3>
-                        <span className="px-2 py-1 rounded bg-slate-800 text-slate-400 text-xs font-bold tracking-wider">0 Events</span>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center text-center text-slate-500 text-sm">
-                        <p>Waiting for trigger...</p>
-                    </div>
+                {/* Right: Live Triage Feed */}
+                <div className="glass-panel p-6 rounded-xl border border-white/5 flex flex-col h-[600px]">
+                    <CallLogFeed />
                 </div>
             </div>
         </div>
