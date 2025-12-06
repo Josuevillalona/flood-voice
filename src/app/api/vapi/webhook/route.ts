@@ -1,27 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-
-async function sendTelegramAlert(chatId: string, residentName: string, summary: string) {
-    if (!TELEGRAM_BOT_TOKEN || !chatId) return;
-
-    const text = `🚨 **DISTRESS ALERT**\n\n**${residentName}** needs help!\n\n📝 *Summary:* "${summary}"\n\n[Check Dashboard](https://floodvoice.vercel.app/dashboard)`;
-
-    try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: text,
-                parse_mode: 'Markdown'
-            })
-        });
-    } catch (e) {
-        console.error("Telegram Alert Failed:", e);
-    }
-}
+import { sendDistressAlert } from '@/lib/telegram';
 
 export async function POST(request: Request) {
     try {
@@ -57,10 +36,23 @@ export async function POST(request: Request) {
 
                     // Trigger Alert if Distress
                     if (status === 'distress') {
-                        const { data: resident } = await supabase.from('residents').select('*, profiles(telegram_chat_id, org_name)').eq('id', residentId).single();
+                        const { data: resident } = await supabase
+                            .from('residents')
+                            .select('name, liaison_id')
+                            .eq('id', residentId)
+                            .single();
 
-                        if (resident && resident.profiles?.telegram_chat_id) {
-                            await sendTelegramAlert(resident.profiles.telegram_chat_id, resident.name, summary);
+                        if (resident) {
+                            // Get liaison's Telegram chat ID
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('telegram_chat_id')
+                                .eq('id', resident.liaison_id)
+                                .single();
+
+                            if (profile?.telegram_chat_id) {
+                                await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
+                            }
                         }
                     }
                 }
@@ -83,8 +75,6 @@ export async function POST(request: Request) {
                 console.log(`End of Call Report for ${residentId}: ${summary}`);
 
                 // Insert Log with Artifacts
-                // Note: This might create a duplicate log if 'reportStatus' also fired. 
-                // For a robust system, we would upsert based on vapi_call_id, but simple insert is OK for MVP visibility.
                 await supabase.from('call_logs').insert({
                     resident_id: residentId,
                     vapi_call_id: payload.message.call?.id,
