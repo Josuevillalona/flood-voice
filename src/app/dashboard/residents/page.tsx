@@ -15,7 +15,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall } from 'lucide-react';
+import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall, CheckCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Type definition
@@ -156,6 +156,15 @@ export default function ResidentsPage() {
             }
         } catch (e: any) {
             alert("Network Error: " + e.message);
+        }
+    };
+
+    const handleUpdateStatus = async (id: string, newStatus: Resident['status']) => {
+        const { error } = await supabase.from('residents').update({ status: newStatus }).eq('id', id);
+        if (!error) {
+            fetchResidents();
+        } else {
+            alert("Error updating status: " + error.message);
         }
     };
 
@@ -322,6 +331,23 @@ export default function ResidentsPage() {
                                     onClick={() => handleSingleCall(resident)}>
                                     <PhoneCall className="w-3 h-3" /> Call
                                 </Button>
+
+                                <div className="w-px h-6 bg-slate-700 mx-1"></div>
+
+                                {/* Status Overrides */}
+                                <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-green-400 hover:bg-green-900/10"
+                                    title="Mark as Safe"
+                                    onClick={() => handleUpdateStatus(resident.id, 'safe')}>
+                                    <CheckCircle className="w-4 h-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-red-400 hover:bg-red-900/10"
+                                    title="Mark as Distress"
+                                    onClick={() => handleUpdateStatus(resident.id, 'distress')}>
+                                    <AlertTriangle className="w-4 h-4" />
+                                </Button>
+
+                                <div className="w-px h-6 bg-slate-700 mx-1"></div>
+
                                 <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-white hover:bg-slate-800"
                                     onClick={() => handleEditClick(resident)}>
                                     <Edit2 className="w-4 h-4" />
