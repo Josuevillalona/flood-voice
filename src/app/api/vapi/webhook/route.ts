@@ -66,43 +66,40 @@ export async function POST(request: Request) {
                     }
                 }
             }
+        } else if (message.type === 'end-of-call-report') {
+            const analysis = message.analysis;
+            const summary = analysis?.summary || "Call completed (No summary generated).";
+            const callMetadata = payload.message.call?.metadata || {};
+            const residentId = callMetadata.residentId;
+
+            if (residentId) {
+                console.log(`End of Call Report for ${residentId}: ${summary}`);
+
+                // Check if we already logged this via function call to avoid duplicates?
+                // For MVP, simple insert is safer to ensure visibility. 
+                // We can use the 'vapi_call_id' to deduplicate if needed, 
+                // but let's just insert for now so the user SEES something.
+
+                // Determine risk from summary if possible, or default to 'pending'/'safe'
+                // Simple heuristic: if summary contains "danger" or "help", mark distress? 
+                // Better: keep it 'safe' or 'pending' unless explicitly flagged.
+                // Actually, let's just log it.
+
+                await supabase.from('call_logs').insert({
+                    resident_id: residentId,
+                    vapi_call_id: payload.message.call?.id,
+                    summary: summary,
+                    risk_label: 'safe' // Default to safe if no explicit distress flag
+                });
+
+                // Also update resident to 'safe' if they were pending? 
+                // Maybe not, we don't want to overwrite a 'distress' status.
+            }
         }
+
+        return NextResponse.json({ success: true });
+    } catch (err: any) {
+        console.error("Webhook Error:", err);
+        return NextResponse.json({ error: err.message }, { status: 500 });
     }
-        // Fallback: Handle 'end-of-call-report' to catch calls where function wasn't triggered but call finished
-        else if (message.type === 'end-of-call-report') {
-        const analysis = message.analysis;
-        const summary = analysis?.summary || "Call completed (No summary generated).";
-        const callMetadata = payload.message.call?.metadata || {};
-        const residentId = callMetadata.residentId;
-
-        if (residentId) {
-            console.log(`End of Call Report for ${residentId}: ${summary}`);
-
-            // Check if we already logged this via function call to avoid duplicates?
-            // For MVP, simple insert is safer to ensure visibility. 
-            // We can use the 'vapi_call_id' to deduplicate if needed, 
-            // but let's just insert for now so the user SEES something.
-
-            // Determine risk from summary if possible, or default to 'pending'/'safe'
-            // Simple heuristic: if summary contains "danger" or "help", mark distress? 
-            // Better: keep it 'safe' or 'pending' unless explicitly flagged.
-            // Actually, let's just log it.
-
-            await supabase.from('call_logs').insert({
-                resident_id: residentId,
-                vapi_call_id: payload.message.call?.id,
-                summary: summary,
-                risk_label: 'safe' // Default to safe if no explicit distress flag
-            });
-
-            // Also update resident to 'safe' if they were pending? 
-            // Maybe not, we don't want to overwrite a 'distress' status.
-        }
-    }
-
-    return NextResponse.json({ success: true });
-} catch (err: any) {
-    console.error("Webhook Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
-}
 }
