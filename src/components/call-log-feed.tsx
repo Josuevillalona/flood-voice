@@ -50,8 +50,7 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
 
     useEffect(() => {
         const fetchLogs = async () => {
-            console.log('Fetching logs...');
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('call_logs')
                 .select(`
                     id, created_at, recording_url, transcript, summary, resident_id, tags, sentiment_score, key_topics,
@@ -60,15 +59,7 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
-            if (error) {
-                console.error("Supabase Error:", error);
-                alert("Error fetching logs: " + error.message);
-            }
-
-            if (data) {
-                console.log("Logs received:", data.length);
-                setLogs(data as any[]);
-            }
+            if (data) setLogs(data as any[]);
             setIsLoading(false);
         };
 
