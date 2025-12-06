@@ -5,6 +5,7 @@ const VAPI_URL = 'https://api.vapi.ai/call';
 const VAPI_PRIVATE_KEY = process.env.VAPI_PRIVATE_KEY;
 
 // The "Brain" of the Voice Agent
+// Note: This must be nested inside an 'assistant' object in the call payload
 const ASSISTANT_CONFIG = {
     model: {
         provider: "openai",
@@ -60,6 +61,22 @@ Style Guide:
     }
 };
 
+// Helper: Ensure phone number is E.164 compliant
+const formatPhoneNumber = (phone: string) => {
+    // Remove non-digit chars
+    const cleaned = phone.replace(/\D/g, '');
+
+    // If it's 10 digits (US standard), add +1
+    if (cleaned.length === 10) return `+1${cleaned}`;
+
+    // If it starts with 1 and is 11 digits, add +
+    if (cleaned.length === 11 && cleaned.startsWith('1')) return `+${cleaned}`;
+
+    // If already has + (was stripped above but checked here logic-wise) -> just return +cleaned
+    // Simpler: assume if <10 it's invalid, if >15 invalid.
+    return `+${cleaned}`;
+};
+
 export async function POST(request: Request) {
     try {
         if (!VAPI_PRIVATE_KEY) {
@@ -84,11 +101,16 @@ export async function POST(request: Request) {
             // Skip if no phone (sanity check)
             if (!resident.phone_number) return null;
 
+            const formattedPhone = formatPhoneNumber(resident.phone_number);
+
             const payload = {
-                ...ASSISTANT_CONFIG,
                 phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
                 customer: {
-                    number: resident.phone_number,
+                    number: formattedPhone,
+                },
+                assistant: {
+                    ...ASSISTANT_CONFIG, // Nested correctly now!
+                    firstMessage: "Hi, this is Flood Voice calling for " + resident.name + ". We are checking on your safety."
                 },
                 assistantOverrides: {
                     variableValues: {
@@ -116,8 +138,14 @@ export async function POST(request: Request) {
 
             if (!response.ok) {
                 const errText = await response.text();
-                console.error(`Vapi Error for ${resident.name}:`, errText);
-                return { residentId: resident.id, success: false, error: errText };
+                // console.error(`Vapi Error for ${resident.name}:`, errText);
+                // Return structured error for dashboard to display
+                try {
+                    const jsonErr = JSON.parse(errText);
+                    return { residentId: resident.id, success: false, error: JSON.stringify(jsonErr) };
+                } catch {
+                    return { residentId: resident.id, success: false, error: errText };
+                }
             }
 
             const result = await response.json();
