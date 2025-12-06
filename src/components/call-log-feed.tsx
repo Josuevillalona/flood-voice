@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,21 +48,21 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchLogs = async () => {
-            const { data } = await supabase
-                .from('call_logs')
-                .select(`
+    const fetchLogs = useCallback(async () => {
+        const { data } = await supabase
+            .from('call_logs')
+            .select(`
                     id, created_at, recording_url, transcript, summary, resident_id, tags, sentiment_score, key_topics,
                     resident:residents(name)
                 `)
-                .order('created_at', { ascending: false })
-                .limit(limit);
+            .order('created_at', { ascending: false })
+            .limit(limit);
 
-            if (data) setLogs(data as any[]);
-            setIsLoading(false);
-        };
+        if (data) setLogs(data as any[]);
+        setIsLoading(false);
+    }, [limit]);
 
+    useEffect(() => {
         fetchLogs();
 
         // Subscribe to real-time changes
@@ -77,7 +77,7 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
             .subscribe();
 
         return () => { subscription.unsubscribe(); };
-    }, [limit]);
+    }, [fetchLogs]);
 
     const toggleExpand = (id: string) => {
         setExpandedId(expandedId === id ? null : id);
@@ -184,11 +184,24 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
                                         className="text-xs h-7"
                                         onClick={async (e) => {
                                             e.stopPropagation();
-                                            await fetch('/api/analyze-call', {
-                                                method: 'POST',
-                                                body: JSON.stringify({ callId: log.id })
-                                            });
-                                            alert("Analysis Queued!");
+                                            const btn = e.currentTarget;
+                                            btn.disabled = true;
+                                            const originalText = btn.textContent;
+                                            btn.textContent = "Analyzing...";
+
+                                            try {
+                                                await fetch('/api/analyze-call', {
+                                                    method: 'POST',
+                                                    body: JSON.stringify({ callId: log.id })
+                                                });
+                                                // FORCE REFRESH: This ensures UI updates regardless of socket latency
+                                                await fetchLogs();
+                                            } catch (err) {
+                                                alert("Analysis Failed");
+                                            } finally {
+                                                btn.disabled = false;
+                                                btn.textContent = originalText;
+                                            }
                                         }}
                                     >
                                         <Brain className="w-3 h-3 mr-2" />
