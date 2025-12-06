@@ -100,7 +100,8 @@ export async function POST(request: Request) {
         let query = supabase
             .from('residents')
             .select('*')
-            .neq('status', 'unresponsive'); // Don't spam unresponsive by default
+            .neq('status', 'unresponsive') // Don't spam unresponsive by default
+            .neq('status', 'safe'); // Don't call those already confirmed safe
 
         if (targetResidentId) {
             console.log(`Targeting single resident: ${targetResidentId}`);
