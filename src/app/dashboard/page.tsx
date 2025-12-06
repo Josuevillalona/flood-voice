@@ -21,14 +21,23 @@ export default function DashboardHome() {
         setIsCalling(true);
         try {
             const res = await fetch('/api/vapi/trigger', { method: 'POST' });
+            const data = await res.json();
+
             if (res.ok) {
-                alert("Emergency Check-in initiated. Monitoring responses...");
-                // In real app, we'd trigger a re-fetch or rely on Realtime
+                // Check if any specific call failed in the batch
+                const failures = data.results?.filter((r: any) => !r.success) || [];
+
+                if (failures.length > 0) {
+                    alert(`Failed to call ${failures.length} resident(s). Error: ${failures[0].error}`);
+                } else {
+                    alert(`Emergency Check-in initiated for ${data.results?.length || 0} residents.`);
+                }
             } else {
-                alert("Failed to trigger calls.");
+                alert(`Failed to trigger calls: ${data.error || 'Unknown error'}`);
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
+            alert(`Network error: ${e.message}`);
         }
         setIsCalling(false);
     };
