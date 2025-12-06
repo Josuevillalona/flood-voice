@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  /* Premium Dark Theme Palette - "Abyssal Tech" */
+  --bg-primary: #020617; /* Very deep blue/black */
+  --bg-secondary: #0f172a; /* Lighter slate */
+  --bg-glass: rgba(15, 23, 42, 0.7);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+
+  --accent-primary: #38bdf8; /* Electric Blue - Trust/Water */
+  --accent-glow: rgba(56, 189, 248, 0.5);
+  
+  --status-danger: #ef4444;
+  --status-warning: #eab308;
+  --status-success: #22c55e;
+  
+  --card-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
