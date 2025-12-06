@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea'; // Assuming we can use standard textarea or input
+import { Textarea } from '@/components/ui/textarea';
 import {
     Dialog,
     DialogContent,
@@ -15,7 +15,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, User, Phone, MapPin, Languages, Activity } from 'lucide-react';
+import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Type definition
@@ -37,6 +37,7 @@ export default function ResidentsPage() {
     const [isOpen, setIsOpen] = useState(false);
 
     // Form State
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -64,34 +65,98 @@ export default function ResidentsPage() {
         setIsLoading(false);
     };
 
-    const handleAddResident = async () => {
+    // Open Modal for Editing
+    const handleEditClick = (resident: Resident) => {
+        setEditingId(resident.id);
+        setFormData({
+            name: resident.name,
+            phone: resident.phone_number,
+            age: resident.age ? resident.age.toString() : '',
+            address: resident.address || '',
+            zip_code: resident.zip_code || '',
+            health_conditions: resident.health_conditions || '',
+            language: resident.language || 'en'
+        });
+        setIsOpen(true);
+    };
+
+    // Open Modal for Creating
+    const handleCreateClick = () => {
+        setEditingId(null);
+        setFormData({ name: '', phone: '', age: '', address: '', zip_code: '', health_conditions: '', language: 'en' });
+        setIsOpen(true);
+    };
+
+    const handleSaveResident = async () => {
         if (!formData.name || !formData.phone) return;
         setIsSubmitting(true);
 
         const { data: { user } } = await supabase.auth.getUser();
 
-        const { error } = await supabase.from('residents').insert({
-            liaison_id: user?.id || '00000000-0000-0000-0000-000000000000',
+        const payload = {
             name: formData.name,
             phone_number: formData.phone,
             age: formData.age ? parseInt(formData.age) : null,
             address: formData.address,
             zip_code: formData.zip_code,
             health_conditions: formData.health_conditions,
-            language: formData.language,
-            status: 'pending'
-        });
+            language: formData.language
+        };
 
-        if (!error) {
-            setIsOpen(false);
-            setFormData({
-                name: '', phone: '', age: '', address: '', zip_code: '', health_conditions: '', language: 'en'
+        let result;
+        if (editingId) {
+            // Update Existing
+            result = await supabase.from('residents').update(payload).eq('id', editingId);
+        } else {
+            // Create New
+            result = await supabase.from('residents').insert({
+                ...payload,
+                liaison_id: user?.id || '00000000-0000-0000-0000-000000000000',
+                status: 'pending'
             });
+        }
+
+        if (!result.error) {
+            setIsOpen(false);
             fetchResidents(); // Refresh list
         } else {
-            alert("Error adding resident: " + error.message);
+            alert("Error saving resident: " + result.error.message);
         }
         setIsSubmitting(false);
+    };
+
+    const handleDelete = async (id: string, name: string) => {
+        if (!confirm(`Are you sure you want to remove ${name}? This cannot be undone.`)) return;
+
+        const { error } = await supabase.from('residents').delete().eq('id', id);
+        if (!error) {
+            fetchResidents();
+        } else {
+            alert("Error deleting: " + error.message);
+        }
+    };
+
+    const handleSingleCall = async (resident: Resident) => {
+        const confirmed = confirm(`Start emergency check-in for ${resident.name}?`);
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch('/api/vapi/trigger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetResidentId: resident.id })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                alert("Call Initiated!");
+                fetchResidents();
+            } else {
+                alert("Call Failed: " + (data.error || "Unknown"));
+            }
+        } catch (e: any) {
+            alert("Network Error: " + e.message);
+        }
     };
 
     return (
@@ -105,15 +170,15 @@ export default function ResidentsPage() {
 
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
                     <DialogTrigger asChild>
-                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateClick}>
                             <Plus className="w-4 h-4" /> Add Resident
                         </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
                         <DialogHeader>
-                            <DialogTitle>Add New Resident</DialogTitle>
+                            <DialogTitle>{editingId ? 'Edit Profile' : 'Add New Resident'}</DialogTitle>
                             <DialogDescription className="text-slate-400">
-                                Create a comprehensive profile to help emergency responders.
+                                {editingId ? 'Update details used for emergency response.' : 'Create a comprehensive profile to help emergency responders.'}
                             </DialogDescription>
                         </DialogHeader>
 
@@ -173,9 +238,8 @@ export default function ResidentsPage() {
                             {/* Health */}
                             <div className="grid gap-2">
                                 <Label htmlFor="health">Vulnerabilities / Health Conditions</Label>
-                                <textarea
+                                <Textarea
                                     id="health"
-                                    className="flex min-h-[80px] w-full rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                     placeholder="e.g. Wheelchair user, Insulin dependent, Oxygen tank..."
                                     value={formData.health_conditions}
                                     onChange={(e) => setFormData({ ...formData, health_conditions: e.target.value })}
@@ -184,8 +248,8 @@ export default function ResidentsPage() {
                         </div>
 
                         <DialogFooter>
-                            <Button onClick={handleAddResident} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700">
-                                {isSubmitting ? 'Saving Profile...' : 'Save Resident Logic'}
+                            <Button onClick={handleSaveResident} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700">
+                                {isSubmitting ? 'Saving Profile...' : 'Save Profile'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -204,7 +268,7 @@ export default function ResidentsPage() {
                     {residents.map((resident) => (
                         <div key={resident.id} className="glass-panel p-6 rounded-xl flex flex-col justify-between group hover:border-blue-500/30 transition-colors relative overflow-hidden">
 
-                            {/* Top Row */}
+                            {/* Top Row: Avatar & Status */}
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-blue-900/50 group-hover:text-blue-400 transition-colors">
@@ -227,7 +291,7 @@ export default function ResidentsPage() {
                             </div>
 
                             {/* Details Grid */}
-                            <div className="space-y-3 text-sm text-slate-400 mb-6">
+                            <div className="space-y-3 text-sm text-slate-400 mb-6 flex-grow">
                                 <div className="flex items-center gap-2">
                                     <Phone className="w-4 h-4 text-slate-600" />
                                     {resident.phone_number}
@@ -244,17 +308,30 @@ export default function ResidentsPage() {
                                         <span className="uppercase">{resident.language}</span>
                                     </div>
                                 )}
-                            </div>
-
-                            {/* Health Alerts */}
-                            {resident.health_conditions && (
-                                <div className="mt-auto pt-4 border-t border-slate-800">
-                                    <div className="flex items-start gap-2 text-xs text-yellow-500/90 bg-yellow-500/5 p-2 rounded">
+                                {resident.health_conditions && (
+                                    <div className="flex items-start gap-2 text-xs text-yellow-500/90 bg-yellow-500/5 p-2 rounded mt-2">
                                         <Activity className="w-4 h-4 mt-0.5 shrink-0" />
                                         <span>{resident.health_conditions}</span>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
+
+                            {/* Action Bar */}
+                            <div className="flex items-center gap-2 pt-4 border-t border-slate-800">
+                                <Button size="sm" variant="outline" className="flex-1 gap-2 border-slate-700 hover:bg-slate-800 hover:text-white"
+                                    onClick={() => handleSingleCall(resident)}>
+                                    <PhoneCall className="w-3 h-3" /> Call
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-white hover:bg-slate-800"
+                                    onClick={() => handleEditClick(resident)}>
+                                    <Edit2 className="w-4 h-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-red-400 hover:bg-red-900/10"
+                                    onClick={() => handleDelete(resident.id, resident.name)}>
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+
                         </div>
                     ))}
                 </div>
