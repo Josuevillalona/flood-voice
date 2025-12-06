@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { analyzeTranscript } from '@/lib/gemini';
 
 export async function POST(request: Request) {
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
         }
 
         // 1. Fetch Transcript
-        const { data: log, error } = await supabase
+        const { data: log, error } = await supabaseAdmin
             .from('call_logs')
             .select('transcript, summary')
             .eq('id', callId)
@@ -35,7 +35,8 @@ export async function POST(request: Request) {
         }
 
         // 3. Save Results
-        const { error: updateError } = await supabase
+        console.log(`Saving analysis for call ${callId}:`, analysis);
+        const { data: updateData, error: updateError } = await supabaseAdmin
             .from('call_logs')
             .update({
                 tags: analysis.tags,
@@ -43,13 +44,25 @@ export async function POST(request: Request) {
                 key_topics: analysis.key_topics,
                 processed_at: new Date().toISOString()
             })
-            .eq('id', callId);
+            .eq('id', callId)
+            .select();
+
+        console.log('Update result:', { updateData, updateError });
 
         if (updateError) {
+            console.error('Supabase update failed:', updateError);
             throw updateError;
         }
 
-        return NextResponse.json({ success: true, analysis });
+        if (!updateData || updateData.length === 0) {
+            console.error('Update returned no data - RLS may be blocking updates');
+            return NextResponse.json({
+                error: 'Update failed - possibly due to RLS policies',
+                analysis
+            }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true, analysis, savedData: updateData[0] });
 
     } catch (error: any) {
         console.error('Analysis API Error:', error);

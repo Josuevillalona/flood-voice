@@ -2,21 +2,24 @@
 
 :root {
   /* Premium Dark Theme Palette - "Abyssal Tech" */
-  --bg-primary: #020617; /* Very deep blue/black */
-  --bg-secondary: #0f172a; /* Lighter slate */
+  --bg-primary: #020617;
+  /* Very deep blue/black */
+  --bg-secondary: #0f172a;
+  /* Lighter slate */
   --bg-glass: rgba(15, 23, 42, 0.7);
-  
+
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #475569;
 
-  --accent-primary: #38bdf8; /* Electric Blue - Trust/Water */
+  --accent-primary: #38bdf8;
+  /* Electric Blue - Trust/Water */
   --accent-glow: rgba(56, 189, 248, 0.5);
-  
+
   --status-danger: #ef4444;
   --status-warning: #eab308;
   --status-success: #22c55e;
-  
+
   --card-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -39,3 +42,27 @@ body {
   text-shadow: 0 0 20px var(--accent-glow);
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}

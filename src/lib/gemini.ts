@@ -27,13 +27,16 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
         return null;
     }
 
-    try {
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json" } // Force JSON
-        });
+    // Model fallback chain - each has separate quota
+    // Using lite variants as they have separate quota pools
+    const MODELS = [
+        "gemini-2.5-flash-lite",   // Ultra fast, separate quota
+        "gemini-2.5-flash",        // Fast and intelligent
+        "gemini-2.0-flash-lite",   // Previous gen lite
+        "gemini-2.0-flash"         // Previous gen workhorse
+    ];
 
-        const prompt = `
+    const prompt = `
       You are an emergency response AI. Analyze this transcript for a liaison dashboard.
       
       TRANSCRIPT:
@@ -61,15 +64,40 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
       }
     `;
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+    let lastError: any = null;
 
-        // Parse JSON safely
-        const data = JSON.parse(text) as CallAnalysis;
-        return data;
+    for (const modelName of MODELS) {
+        try {
+            console.log(`Trying model: ${modelName}`);
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: "application/json" }
+            });
 
-    } catch (error: any) {
-        console.error("Gemini Analysis Failed:", error);
-        throw new Error(`Gemini Error: ${error.message || error}`);
+            const result = await model.generateContent(prompt);
+            const text = result.response.text();
+
+            // Parse JSON safely
+            const data = JSON.parse(text) as CallAnalysis;
+            console.log(`Success with model: ${modelName}`);
+            return data;
+
+        } catch (error: any) {
+            console.error(`Model ${modelName} failed:`, error.message || error);
+            lastError = error;
+
+            // If it's a rate limit error (429), try next model
+            if (error.message?.includes('429') || error.message?.includes('quota')) {
+                console.log(`Rate limited on ${modelName}, trying next model...`);
+                continue;
+            }
+
+            // For other errors, throw immediately
+            throw new Error(`Gemini Error: ${error.message || error}`);
+        }
     }
+
+    // All models exhausted
+    throw new Error(`All Gemini models rate limited. Please try again later. Last error: ${lastError?.message || lastError}`);
 }
+

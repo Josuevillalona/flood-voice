@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, FileText, Activity, Zap, Droplets, Utensils, Home, Brain, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, FileText, Activity, Zap, Droplets, Utensils, Home, Brain, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -23,24 +23,26 @@ type CallLog = {
     key_topics: string;
 };
 
-// Map Tags to Colors & Icons
+// Map Tags to Colors & Icons - Compact version
 const getTagConfig = (tag: string) => {
     switch (tag) {
-        case 'Medical': return { color: 'bg-red-500/20 text-red-500 border-red-500/30', icon: Activity };
-        case 'Food/Water': return { color: 'bg-orange-500/20 text-orange-500 border-orange-500/30', icon: Utensils };
-        case 'Power': return { color: 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30', icon: Zap };
-        case 'Evacuation': return { color: 'bg-purple-500/20 text-purple-500 border-purple-500/30', icon: Home };
-        case 'Mental Health': return { color: 'bg-pink-500/20 text-pink-500 border-pink-500/30', icon: Brain };
-        case 'Property Damage': return { color: 'bg-blue-500/20 text-blue-500 border-blue-500/30', icon: Droplets };
-        default: return { color: 'bg-slate-800 text-slate-400 border-slate-700', icon: FileText };
+        case 'Medical': return { color: 'bg-red-500/30 text-red-400', icon: Activity, short: 'Med' };
+        case 'Food/Water': return { color: 'bg-orange-500/30 text-orange-400', icon: Utensils, short: 'Food' };
+        case 'Power': return { color: 'bg-yellow-500/30 text-yellow-400', icon: Zap, short: 'Pwr' };
+        case 'Evacuation': return { color: 'bg-purple-500/30 text-purple-400', icon: Home, short: 'Evac' };
+        case 'Mental Health': return { color: 'bg-pink-500/30 text-pink-400', icon: Brain, short: 'MH' };
+        case 'Property Damage': return { color: 'bg-blue-500/30 text-blue-400', icon: Droplets, short: 'Prop' };
+        case 'Safe': return { color: 'bg-green-500/30 text-green-400', icon: FileText, short: 'Safe' };
+        default: return { color: 'bg-slate-700/50 text-slate-400', icon: FileText, short: tag.slice(0, 4) };
     }
 };
 
-const getSentimentColor = (score: number) => {
-    if (score >= 9) return "bg-red-600 text-white animate-pulse";
-    if (score >= 7) return "bg-red-500 text-white";
-    if (score >= 4) return "bg-yellow-500 text-black";
-    return "bg-green-500 text-white";
+// Get border and badge colors based on score
+const getPriorityColors = (score: number) => {
+    if (score >= 8) return { border: 'border-l-red-500', badge: 'bg-red-500 text-white', pulse: true };
+    if (score >= 6) return { border: 'border-l-orange-500', badge: 'bg-orange-500 text-white', pulse: false };
+    if (score >= 4) return { border: 'border-l-yellow-500', badge: 'bg-yellow-500 text-black', pulse: false };
+    return { border: 'border-l-green-500', badge: 'bg-green-600 text-white', pulse: false };
 };
 
 export function CallLogFeed({ limit = 10 }: { limit?: number }) {
@@ -88,74 +90,87 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
     if (logs.length === 0) return <div className="text-slate-500 text-sm">No recent calls recorded.</div>;
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-2">
             {logs.map((log) => {
-                // Debug Render State
-                console.log(`Render Log [${log.id}]: Score=${log.sentiment_score}, Tags=${log.tags}`);
+                const score = log.sentiment_score ?? 0;
+                const priority = getPriorityColors(score);
+                const isExpanded = expandedId === log.id;
 
                 return (
-                    <Card key={log.id} className={cn(
-                        "bg-slate-900 border-slate-800 overflow-hidden transition-all duration-300",
-                        (log.sentiment_score ?? 0) >= 8 ? "border-l-4 border-l-red-500" : ""
-                    )}>
-                        <div
-                            className="p-4 cursor-pointer hover:bg-slate-800/50 transition-colors"
-                            onClick={() => toggleExpand(log.id)}
-                        >
-                            {/* Header Row: Name | Time | Badges */}
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-semibold text-white text-base">
-                                        {log.resident?.name || 'Unknown Caller'}
+                    <Card
+                        key={log.id}
+                        className={cn(
+                            "bg-slate-900/80 border-slate-800 overflow-hidden transition-all duration-200 cursor-pointer hover:bg-slate-800/60",
+                            score > 0 && `border-l-4 ${priority.border}`
+                        )}
+                        onClick={() => toggleExpand(log.id)}
+                    >
+                        {/* Compact Card View */}
+                        <div className="px-3 py-2.5">
+                            {/* Row 1: Name + Time | Score */}
+                            <div className="flex items-center justify-between gap-2">
+                                {/* Left: Name + Time */}
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-semibold text-white text-sm truncate">
+                                        {log.resident?.name || 'Unknown'}
                                     </span>
-                                    <span className="text-xs text-slate-500">
+                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">
                                         {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
                                     </span>
                                 </div>
 
-                                {/* Sentiment Badge - The Primary Signal */}
-                                {log.sentiment_score > 0 && (
-                                    <Badge className={cn("text-xs font-bold px-2 py-0.5 border-none", getSentimentColor(log.sentiment_score))}>
-                                        Score: {log.sentiment_score}/10
-                                    </Badge>
-                                )}
+                                {/* Right: Score Badge + Expand */}
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    {score > 0 && (
+                                        <span className={cn(
+                                            "text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[32px] text-center",
+                                            priority.badge,
+                                            priority.pulse && "animate-pulse"
+                                        )}>
+                                            {score}
+                                        </span>
+                                    )}
+                                    <ChevronDown className={cn(
+                                        "w-4 h-4 text-slate-500 transition-transform",
+                                        isExpanded && "rotate-180"
+                                    )} />
+                                </div>
                             </div>
 
-                            {/* Summary / Key Topics Row */}
-                            <div className="flex justify-between items-end">
-                                <div className="space-y-2 flex-1 mr-4">
-                                    {/* AI Summary Check */}
-                                    {log.key_topics ? (
-                                        <p className="text-sm text-slate-300 italic border-l-2 border-slate-700 pl-3">
+                            {/* Row 2: Summary + Tags */}
+                            {(log.key_topics || (log.tags && log.tags.length > 0)) && (
+                                <div className="mt-2 space-y-1.5">
+                                    {/* Summary */}
+                                    {log.key_topics && (
+                                        <p className="text-xs text-slate-400 line-clamp-1 italic">
                                             "{log.key_topics}"
-                                        </p>
-                                    ) : (
-                                        <p className="text-sm text-slate-500 line-clamp-1">
-                                            {log.summary || log.transcript || "Processing transcript..."}
                                         </p>
                                     )}
 
                                     {/* Tags Row */}
                                     {log.tags && log.tags.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
+                                        <div className="flex flex-wrap gap-1.5">
                                             {log.tags.map(tag => {
                                                 const config = getTagConfig(tag);
                                                 const Icon = config.icon;
                                                 return (
-                                                    <span key={tag} className={cn("text-[10px] px-2 py-0.5 rounded border flex items-center gap-1", config.color)}>
+                                                    <span
+                                                        key={tag}
+                                                        className={cn(
+                                                            "text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1",
+                                                            config.color
+                                                        )}
+                                                        title={tag}
+                                                    >
                                                         <Icon className="w-3 h-3" />
-                                                        {tag}
+                                                        {config.short}
                                                     </span>
                                                 );
                                             })}
                                         </div>
                                     )}
                                 </div>
-
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500">
-                                    {expandedId === log.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                </Button>
-                            </div>
+                            )}
                         </div>
 
                         {/* Expanded Detail View: Audio & Full Transcript */}
@@ -194,16 +209,39 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
                                                 btn.textContent = "Analyzing...";
 
                                                 try {
-                                                    await fetch('/api/analyze-call', {
+                                                    console.log(`Starting analysis for call: ${log.id}`);
+                                                    const response = await fetch('/api/analyze-call', {
                                                         method: 'POST',
+                                                        headers: {
+                                                            'Content-Type': 'application/json',
+                                                        },
                                                         body: JSON.stringify({ callId: log.id })
                                                     });
 
-                                                    // Wait 1s for DB propagation then refresh
-                                                    await new Promise(resolve => setTimeout(resolve, 1000));
-                                                    await fetchLogs();
-                                                } catch (err) {
-                                                    alert("Analysis Failed");
+                                                    const result = await response.json();
+                                                    console.log('Analysis API Response:', result);
+
+                                                    if (!response.ok) {
+                                                        throw new Error(result.error || 'Analysis failed');
+                                                    }
+
+                                                    // Directly update local state with the analysis results
+                                                    if (result.success && result.analysis) {
+                                                        setLogs(prevLogs => prevLogs.map(l =>
+                                                            l.id === log.id
+                                                                ? {
+                                                                    ...l,
+                                                                    tags: result.analysis.tags,
+                                                                    sentiment_score: result.analysis.sentiment_score,
+                                                                    key_topics: result.analysis.key_topics
+                                                                }
+                                                                : l
+                                                        ));
+                                                        console.log('Local state updated with analysis:', result.analysis);
+                                                    }
+                                                } catch (err: any) {
+                                                    console.error('Analysis Error:', err);
+                                                    alert(`Analysis Failed: ${err.message}`);
                                                 } finally {
                                                     btn.disabled = false;
                                                     btn.textContent = originalText;

@@ -107,7 +107,7 @@ export default function DashboardHome() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-white">Command Center</h1>
-                    <p className="text-slate-400">Live monitoring of Pod #104 (East Elmhurst)</p>
+                    <p className="text-slate-400">Real-time resident monitoring & flood alerts</p>
                 </div>
 
                 <button
@@ -189,8 +189,13 @@ export default function DashboardHome() {
                 </div>
 
                 {/* Right: Live Triage Feed */}
-                <div className="glass-panel p-6 rounded-xl border border-white/5 flex flex-col h-[600px]">
-                    <CallLogFeed />
+                <div className="glass-panel rounded-xl border border-white/5 flex flex-col h-[600px] overflow-hidden">
+                    <div className="px-4 py-3 border-b border-white/5 flex-shrink-0">
+                        <h3 className="text-sm font-semibold text-white">Live Call Feed</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3">
+                        <CallLogFeed />
+                    </div>
                 </div>
             </div>
         </div>
