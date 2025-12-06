@@ -17,29 +17,46 @@ export async function POST(request: Request) {
             .eq('id', residentId)
             .single();
 
-        if (!resident) {
-            return NextResponse.json({ error: 'Resident not found' }, { status: 404 });
+        let targetChatId = null;
+
+        // 1. Try to find the specific liaison's chat ID
+        if (resident?.liaison_id) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('telegram_chat_id')
+                .eq('id', resident.liaison_id)
+                .single();
+            targetChatId = profile?.telegram_chat_id;
         }
 
-        // Get liaison's Telegram chat ID
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('telegram_chat_id')
-            .eq('id', resident.liaison_id)
-            .single();
+        // 2. FALLBACK (MVP/Demo Mode): If no specific liaison found (or auth issue), 
+        // find ANY profile with a telegram_chat_id (likely the user who set it up)
+        if (!targetChatId) {
+            console.log('No specific liaison Telegram found, likely unauthenticated. Trying fallback...');
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('telegram_chat_id')
+                .not('telegram_chat_id', 'is', null)
+                .limit(1);
 
-        if (!profile?.telegram_chat_id) {
+            if (profiles && profiles.length > 0) {
+                targetChatId = profiles[0].telegram_chat_id;
+            }
+        }
+
+        if (!targetChatId) {
             return NextResponse.json({
-                error: 'Liaison does not have Telegram configured',
-                message: 'Alert not sent - no telegram_chat_id found'
+                error: 'No Telegram recipients found',
+                message: 'No profiles found with telegram_chat_id configured'
             }, { status: 200 });
         }
 
         // Send the alert
-        await sendDistressAlert(profile.telegram_chat_id, residentName, residentId);
+        await sendDistressAlert(targetChatId, residentName, residentId);
 
         return NextResponse.json({
             success: true,
+            mapped_chat_id: targetChatId,
             message: `Alert sent to Telegram (${source || 'unknown'} trigger)`
         });
 
