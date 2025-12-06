@@ -11,156 +11,46 @@ const ASSISTANT_CONFIG = {
         provider: "openai",
         model: "gpt-4o-mini",
         messages: [
-            {
-                role: "system",
-                content: `You are 'Flood Voice', a calm and helpful disaster response assistant.
-
-Your Goal: Verify the resident's safety and collect details about local flooding conditions.
-
-Conversation Flow:
-1. **Safety First**: "Hi, this is Flood Voice calling for {{name}}. We are checking on your safety. Are you in any immediate danger?"
-   - **IF DANGER** (Trapped, medical emergency, rising water): 
-     - Instruct them to hang up and call 911 immediately.
-     - Call function 'reportStatus("distress", "[Details]")'.
-     - End call.
-
-2. **Investigation** (If Safe):
-   - "Glad to hear you are safe. We are tracking flood levels. Is there any active flooding around your building right now?"
-   - **Refine Details**: 
-     - "How deep would you say the water is? Ankle deep? Knee deep?"
-     - "Is the water entering your home or basement?"
-
-3. **Close**:
-   - "Thank you for that information. I've updated your status. Please stay safe."
-   - Call function 'reportStatus("safe", "[Summary of flooding conditions]")'.
-
-Style Guide:
-- Be empathetic but efficient.
-- If they are chatty, kindly steer back to safety questions.
-- If they sound confused, reassure them this is a standard community check-in.`
-            }
-        ],
-        functions: [
-            {
-                name: "reportStatus",
-                description: "Report the safety status and flooding conditions to the dashboard.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        status: { type: "string", enum: ["safe", "distress"] },
-                        summary: { type: "string", description: "A summary of the resident's situation and flooding details (e.g., 'Safe, but basement flooding 2 inches')." }
-                    },
-                    required: ["status", "summary"]
                 }
-            }
-        ]
+};
+
+// Update local status to 'pending'/'calling'
+await supabase.from('residents').update({ status: 'pending' }).eq('id', resident.id);
+
+const response = await fetch(VAPI_URL, {
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${VAPI_PRIVATE_KEY}`,
+        'Content-Type': 'application/json'
     },
-    voice: {
-        provider: "11labs",
-        voiceId: "sarah" // Generic friendly voice
-    }
-};
+    body: JSON.stringify(payload)
+});
 
-// Helper: Ensure phone number is E.164 compliant
-const formatPhoneNumber = (phone: string) => {
-    // Remove non-digit chars
-    const cleaned = phone.replace(/\D/g, '');
-
-    // If it's 10 digits (US standard), add +1
-    if (cleaned.length === 10) return `+1${cleaned}`;
-
-    // If it starts with 1 and is 11 digits, add +
-    if (cleaned.length === 11 && cleaned.startsWith('1')) return `+${cleaned}`;
-
-    // If already has + (was stripped above but checked here logic-wise) -> just return +cleaned
-    // Simpler: assume if <10 it's invalid, if >15 invalid.
-    return `+${cleaned}`;
-};
-
-export async function POST(request: Request) {
+if (!response.ok) {
+    const errText = await response.text();
+    // console.error(`Vapi Error for ${resident.name}:`, errText);
+    // Return structured error for dashboard to display
     try {
-        if (!VAPI_PRIVATE_KEY) {
-            return NextResponse.json({ error: 'Missing VAPI_PRIVATE_KEY' }, { status: 500 });
-        }
+        const jsonErr = JSON.parse(errText);
+        return { residentId: resident.id, success: false, error: JSON.stringify(jsonErr) };
+    } catch {
+        return { residentId: resident.id, success: false, error: errText };
+    }
+}
 
-        // 1. Fetch Residents (Simulated "Pod" fetch)
-        // In real app, we'd fetch based on the logged-in user's Pod ID
-        const { data: residents, error } = await supabase
-            .from('residents')
-            .select('*')
-            .neq('status', 'unresponsive'); // Don't spam unresponsive for now
-
-        if (error || !residents) {
-            return NextResponse.json({ error: 'Failed to fetch residents' }, { status: 500 });
-        }
-
-        console.log(`Triggering calls for ${residents.length} residents...`);
-
-        // 2. Loop and Call Vapi
-        const callPromises = residents.map(async (resident) => {
-            // Skip if no phone (sanity check)
-            if (!resident.phone_number) return null;
-
-            const formattedPhone = formatPhoneNumber(resident.phone_number);
-
-            const payload = {
-                phoneNumberId: process.env.VAPI_PHONE_NUMBER_ID,
-                customer: {
-                    number: formattedPhone,
-                },
-                assistant: {
-                    ...ASSISTANT_CONFIG, // Nested correctly now!
-                    firstMessage: "Hi, this is Flood Voice calling for " + resident.name + ". We are checking on your safety."
-                },
-                assistantOverrides: {
-                    variableValues: {
-                        name: resident.name
-                    }
-                },
-                // Metadata for tracking in webhook
-                metadata: {
-                    residentId: resident.id,
-                    podId: resident.liaison_id
-                }
-            };
-
-            // Update local status to 'pending'/'calling'
-            await supabase.from('residents').update({ status: 'pending' }).eq('id', resident.id);
-
-            const response = await fetch(VAPI_URL, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${VAPI_PRIVATE_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                // console.error(`Vapi Error for ${resident.name}:`, errText);
-                // Return structured error for dashboard to display
-                try {
-                    const jsonErr = JSON.parse(errText);
-                    return { residentId: resident.id, success: false, error: JSON.stringify(jsonErr) };
-                } catch {
-                    return { residentId: resident.id, success: false, error: errText };
-                }
-            }
-
-            const result = await response.json();
-            return { residentId: resident.id, vapiId: result.id, success: true };
+const result = await response.json();
+return { residentId: resident.id, vapiId: result.id, success: true };
         });
 
-        const results = await Promise.all(callPromises);
+const results = await Promise.all(callPromises);
 
-        return NextResponse.json({
-            message: `Triggered ${results.length} calls`,
-            results
-        });
+return NextResponse.json({
+    message: `Triggered ${results.length} calls`,
+    results
+});
 
     } catch (err: any) {
-        console.error("Trigger Error:", err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
-    }
+    console.error("Trigger Error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+}
 }
