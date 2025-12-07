@@ -28,26 +28,43 @@ export async function POST(request: Request) {
                     : {};
             } else {
                 // New tool-calls format (VAPI documented structure)
-                // Uses message.toolCallList[] with name, id, and parameters
-                const toolCallList = message.toolCallList || [];
-                const firstCall = toolCallList[0];
+                // Log the raw message to see what Vapi actually sends
+                console.log('[TOOL-CALLS] Raw message structure:', JSON.stringify({
+                    toolCallList: message.toolCallList,
+                    toolWithToolCallList: message.toolWithToolCallList
+                }, null, 2));
 
-                if (firstCall) {
-                    functionName = firstCall.name || '';
+                // Try toolCallList first
+                const toolCallList = message.toolCallList || [];
+                let firstCall = toolCallList[0];
+
+                // Fallback to toolWithToolCallList if toolCallList is empty or has no name
+                if (!firstCall?.name && message.toolWithToolCallList?.length > 0) {
+                    console.log('[TOOL-CALLS] Falling back to toolWithToolCallList');
+                    const firstTool = message.toolWithToolCallList[0];
+                    firstCall = {
+                        name: firstTool.name,
+                        id: firstTool.toolCall?.id,
+                        parameters: firstTool.toolCall?.parameters
+                    };
+                }
+
+                if (firstCall && firstCall.name) {
+                    functionName = firstCall.name;
                     toolCallId = firstCall.id || '';
                     functionArgs = firstCall.parameters || {};
 
-                    console.log('Tool call details:', {
+                    console.log('[TOOL-CALLS] Parsed successfully:', {
                         name: functionName,
                         id: toolCallId,
                         parameters: functionArgs
                     });
                 } else {
-                    console.log('No tool calls found in toolCallList');
+                    console.error('[TOOL-CALLS] Could not extract function name from payload');
                     return NextResponse.json({
                         results: [{
-                            toolCallId: 'unknown',
-                            error: 'No tool calls found'
+                            toolCallId: firstCall?.id || 'unknown',
+                            error: 'Could not parse function name from tool-calls payload'
                         }]
                     });
                 }
