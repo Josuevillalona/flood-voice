@@ -15,7 +15,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Type definition
@@ -369,6 +369,11 @@ export default function ResidentsPage() {
                                     title="Mark as Safe"
                                     onClick={() => handleUpdateStatus(resident.id, 'safe')}>
                                     <CheckCircle className="w-4 h-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-yellow-400 hover:bg-yellow-900/10"
+                                    title="Mark as Pending"
+                                    onClick={() => handleUpdateStatus(resident.id, 'pending')}>
+                                    <Clock className="w-4 h-4" />
                                 </Button>
                                 <Button size="icon" variant="ghost" className="h-9 w-9 text-slate-400 hover:text-red-400 hover:bg-red-900/10"
                                     title="Mark as Distress"
