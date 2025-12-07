@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Droplets, RefreshCw, MapPin, TrendingUp } from 'lucide-react';
+import { Droplets, RefreshCw, MapPin, TrendingUp, Search, Filter, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useFlooding } from '@/contexts/flooding-context';
 
 export function FloodNetGraph({ className }: { className?: string }) {
     const [data, setData] = useState<any[]>([]);
@@ -12,10 +13,26 @@ export function FloodNetGraph({ className }: { className?: string }) {
     const [timeRange, setTimeRange] = useState('24h');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const [sensorSearch, setSensorSearch] = useState('');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [hasAutoSelected, setHasAutoSelected] = useState(false);
+
+    // Use shared flooding context
+    const flooding = useFlooding();
+    const floodingSensors = flooding.floodingSensors;
+    const floodingSensorIds = floodingSensors.map(s => s.id);
 
     useEffect(() => {
         fetchSensors();
     }, []);
+
+    // Auto-select first flooding sensor when detected
+    useEffect(() => {
+        if (floodingSensors.length > 0 && !hasAutoSelected) {
+            setSelectedSensor(floodingSensors[0].id);
+            setHasAutoSelected(true);
+        }
+    }, [floodingSensors, hasAutoSelected]);
 
     useEffect(() => {
         if (selectedSensor) {
@@ -130,7 +147,34 @@ export function FloodNetGraph({ className }: { className?: string }) {
 
     return (
         <div className={cn("glass-panel p-6 rounded-xl flex flex-col h-[400px]", className)}>
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+            {/* Flooding Now - Compact inline */}
+            {floodingSensors.length > 0 && (
+                <div className="mb-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-red-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Flooding:
+                    </span>
+                    {floodingSensors.slice(0, 3).map(sensor => (
+                        <button
+                            key={sensor.id}
+                            onClick={() => setSelectedSensor(sensor.id)}
+                            className={cn(
+                                "px-2 py-0.5 rounded text-[11px] transition-all",
+                                selectedSensor === sensor.id
+                                    ? "bg-red-500 text-white"
+                                    : "bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                            )}
+                        >
+                            {formatName(sensor.name).split(' - ')[1]?.substring(0, 15) || sensor.name.substring(0, 15)}... {sensor.depth_in}″
+                        </button>
+                    ))}
+                    {floodingSensors.length > 3 && (
+                        <span className="text-[11px] text-slate-500">+{floodingSensors.length - 3}</span>
+                    )}
+                </div>
+            )}
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
                 <div className="flex items-center gap-3">
                     <div className={cn("p-2 rounded-lg transition-colors", isDanger ? "bg-red-500/10" : "bg-blue-500/10")}>
                         <Droplets className={cn("w-5 h-5", isDanger ? "text-red-500" : "text-blue-400")} />
@@ -142,19 +186,56 @@ export function FloodNetGraph({ className }: { className?: string }) {
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
                             <div className="flex items-center gap-2">
                                 <MapPin className="w-3 h-3 text-slate-500" />
-                                <select
-                                    value={selectedSensor}
-                                    onChange={(e) => setSelectedSensor(e.target.value)}
-                                    className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1 cursor-pointer hover:border-slate-600 transition-colors max-w-[150px] truncate appearance-none"
-                                >
-                                    <option value="" disabled>Select Location...</option>
-                                    {sensors.length === 0 && <option disabled>Loading locations...</option>}
-                                    {sensors.map(s => (
-                                        <option key={s.deployment_id} value={s.deployment_id} className="bg-slate-900 text-slate-200">
-                                            {formatName(s.name)}
-                                        </option>
-                                    ))}
-                                </select>
+                                {/* Searchable Dropdown */}
+                                <div className="relative">
+                                    <div className="flex items-center">
+                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none z-10" />
+                                        <input
+                                            type="text"
+                                            placeholder={sensors.find(s => s.deployment_id === selectedSensor)?.name ? formatName(sensors.find(s => s.deployment_id === selectedSensor)?.name).substring(0, 18) + '...' : 'Select sensor...'}
+                                            value={sensorSearch}
+                                            onChange={(e) => setSensorSearch(e.target.value)}
+                                            onClick={() => setIsDropdownOpen(true)}
+                                            onFocus={() => setIsDropdownOpen(true)}
+                                            onBlur={() => setTimeout(() => setIsDropdownOpen(false), 150)}
+                                            className="w-[160px] pl-7 pr-2 py-1 text-xs bg-slate-900 border border-slate-800 text-slate-200 rounded hover:border-slate-600 transition-colors focus:outline-none focus:border-blue-500/50"
+                                        />
+                                    </div>
+                                    {isDropdownOpen && (
+                                        <div className="absolute top-full left-0 mt-1 w-[220px] max-h-[250px] overflow-auto bg-slate-900 border border-slate-700 rounded-lg shadow-lg z-50">
+                                            {sensors
+                                                .filter(s =>
+                                                    sensorSearch === '' ||
+                                                    s.name.toLowerCase().includes(sensorSearch.toLowerCase()) ||
+                                                    s.deployment_id.toLowerCase().includes(sensorSearch.toLowerCase())
+                                                )
+                                                .map(s => (
+                                                    <button
+                                                        key={s.deployment_id}
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            setSelectedSensor(s.deployment_id);
+                                                            setSensorSearch('');
+                                                            setIsDropdownOpen(false);
+                                                        }}
+                                                        className={cn(
+                                                            "w-full text-left px-3 py-2 text-xs hover:bg-slate-800 transition-colors",
+                                                            selectedSensor === s.deployment_id ? "bg-blue-500/20 text-blue-400" : "text-slate-300"
+                                                        )}
+                                                    >
+                                                        {formatName(s.name)}
+                                                    </button>
+                                                ))}
+                                            {sensors.filter(s =>
+                                                sensorSearch === '' ||
+                                                s.name.toLowerCase().includes(sensorSearch.toLowerCase()) ||
+                                                s.deployment_id.toLowerCase().includes(sensorSearch.toLowerCase())
+                                            ).length === 0 && (
+                                                    <div className="px-3 py-2 text-xs text-slate-500">No sensors found</div>
+                                                )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <span className="hidden sm:inline text-slate-700">|</span>

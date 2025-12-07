@@ -1,193 +1,105 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Waves, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface FloodingSensor {
-    id: string;
-    name: string;
-    depth_mm: number;
-    depth_in: number;
-}
-
-interface StreamData {
-    type: 'init' | 'update' | 'complete' | 'error';
-    floodingCount: number;
-    activeSensors?: number;
-    totalToCheck?: number;
-    checked?: number;
-    floodingSensors: FloodingSensor[];
-    error?: string;
-}
+import { useFlooding } from '@/contexts/flooding-context';
 
 export function FloodingDetected({ className }: { className?: string }) {
-    const [floodingCount, setFloodingCount] = useState(0);
-    const [activeSensors, setActiveSensors] = useState(0);
-    const [floodingSensors, setFloodingSensors] = useState<FloodingSensor[]>([]);
-    const [checked, setChecked] = useState(0);
-    const [totalToCheck, setTotalToCheck] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isComplete, setIsComplete] = useState(false);
-    const [error, setError] = useState('');
-
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setIsComplete(false);
-        setError('');
-        setFloodingCount(0);
-        setChecked(0);
-        setFloodingSensors([]);
-
-        try {
-            const response = await fetch('/api/floodnet/flooding-stream');
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder();
-
-            if (!reader) {
-                throw new Error('Stream not supported');
-            }
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const text = decoder.decode(value);
-                const lines = text.split('\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data: StreamData = JSON.parse(line.slice(6));
-
-                            if (data.type === 'error') {
-                                setError(data.error || 'Unknown error');
-                                break;
-                            }
-
-                            if (data.type === 'init') {
-                                setTotalToCheck(data.totalToCheck || 0);
-                                setIsLoading(false);
-                            }
-
-                            if (data.type === 'update' || data.type === 'complete') {
-                                setFloodingCount(data.floodingCount);
-                                setChecked(data.checked || 0);
-                                setFloodingSensors(data.floodingSensors || []);
-                            }
-
-                            if (data.type === 'complete') {
-                                setActiveSensors(data.activeSensors || 0);
-                                setIsComplete(true);
-                            }
-                        } catch {
-                            // Ignore JSON parse errors for incomplete chunks
-                        }
-                    }
-                }
-            }
-        } catch (e: unknown) {
-            const message = e instanceof Error ? e.message : 'Unknown error';
-            setError(message);
-        }
-        setIsLoading(false);
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-        // Refresh every 5 minutes
-        const interval = setInterval(fetchData, 5 * 60 * 1000);
-        return () => clearInterval(interval);
-    }, [fetchData]);
+    const {
+        floodingCount,
+        activeSensors,
+        isLoading,
+        isComplete,
+        checked,
+        totalToCheck
+    } = useFlooding();
 
     const hasFlooding = floodingCount > 0;
-    const progress = totalToCheck > 0 ? Math.round((checked / totalToCheck) * 100) : 0;
+    const progress = totalToCheck > 0 ? (checked / totalToCheck) * 100 : 0;
+
+    // Color states
+    const getBorderColor = () => {
+        if (!isComplete) return 'border-blue-500/30';
+        return hasFlooding ? 'border-red-500/30' : 'border-emerald-500/30';
+    };
+
+    const getIconBgColor = () => {
+        if (!isComplete) return 'bg-blue-500/10';
+        return hasFlooding ? 'bg-red-500/10' : 'bg-emerald-500/10';
+    };
+
+    const getIconColor = () => {
+        if (!isComplete) return 'text-blue-400';
+        return hasFlooding ? 'text-red-500 animate-pulse' : 'text-emerald-400';
+    };
+
+    const getCountColor = () => {
+        if (!isComplete) return 'text-blue-400';
+        return hasFlooding ? 'text-red-500' : 'text-emerald-400';
+    };
 
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15 }}
             className={cn(
-                "glass-panel p-6 rounded-xl border-l-4 transition-all duration-500 relative overflow-hidden min-h-[140px]",
-                hasFlooding
-                    ? "border-red-500 bg-red-500/5"
-                    : isComplete
-                        ? "border-emerald-500 bg-emerald-500/5"
-                        : "border-blue-500 bg-blue-500/5",
+                "glass-panel p-4 rounded-xl border transition-all duration-500 min-h-[140px]",
+                getBorderColor(),
                 className
             )}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
         >
-            {/* Pulsing background for active flooding */}
-            {hasFlooding && (
-                <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none" />
-            )}
+            <div className="flex items-center justify-between mb-3">
+                <h3 className={cn(
+                    "text-sm font-semibold transition-colors",
+                    hasFlooding && isComplete ? "text-red-400" : "text-blue-400"
+                )}>
+                    Flooding Detected
+                </h3>
+                <div className={cn(
+                    "p-1.5 rounded-lg transition-colors",
+                    isLoading ? "animate-spin" : ""
+                )}>
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                </div>
+            </div>
 
-            <div className="relative z-10">
-                <div className="flex items-center justify-between mb-2">
-                    <span className={cn(
-                        "text-sm font-medium",
-                        hasFlooding ? "text-red-300" : isComplete ? "text-emerald-300" : "text-blue-300"
-                    )}>
-                        Flooding Detected
-                    </span>
-                    <div className="flex items-center gap-2">
-                        {hasFlooding && (
-                            <AlertCircle className="w-4 h-4 text-red-500 animate-pulse" />
-                        )}
-                        <button
-                            onClick={fetchData}
-                            disabled={isLoading || (!isComplete && checked > 0)}
-                            className="p-1 hover:bg-white/5 rounded transition-colors"
-                            title="Refresh flooding status"
-                        >
-                            <RefreshCw className={cn(
-                                "w-4 h-4 text-slate-500",
-                                (isLoading || (!isComplete && checked > 0)) && "animate-spin"
-                            )} />
-                        </button>
-                    </div>
+            <div className="flex items-center gap-4">
+                <motion.div
+                    className={cn("text-4xl font-bold transition-colors", getCountColor())}
+                    key={floodingCount}
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    {floodingCount}
+                </motion.div>
+
+                <div className={cn("p-2 rounded-lg transition-colors", getIconBgColor())}>
+                    <Waves className={cn(
+                        "w-6 h-6",
+                        hasFlooding ? "text-red-500" : isComplete ? "text-emerald-400" : "text-blue-400"
+                    )} />
+                </div>
+            </div>
+
+            <div className="mt-3">
+                <div className="text-xs text-slate-400">
+                    {isComplete
+                        ? `of ${activeSensors} sensors checked`
+                        : `Checking... ${checked}/${totalToCheck}`
+                    }
                 </div>
 
-                {error ? (
-                    <div className="text-red-400 text-sm">{error}</div>
-                ) : (
-                    <>
-                        <div className="flex items-end gap-2">
-                            <span className={cn(
-                                "text-4xl font-bold transition-colors",
-                                hasFlooding ? "text-red-500" : isComplete ? "text-emerald-400" : "text-blue-400"
-                            )}>
-                                {floodingCount}
-                            </span>
-                            <Waves className={cn(
-                                "w-6 h-6 mb-1",
-                                hasFlooding ? "text-red-500" : isComplete ? "text-emerald-400" : "text-blue-400"
-                            )} />
-                        </div>
-
-                        <div className="text-xs text-slate-400 mt-1 truncate max-w-full">
-                            {isComplete
-                                ? hasFlooding && floodingSensors.length > 0
-                                    ? `📍 ${floodingSensors[0].name.replace(/^[A-Z]+\s*-\s*/, '').substring(0, 20)}...`
-                                    : `of ${activeSensors} sensors checked`
-                                : `Checking... ${checked}/${totalToCheck}`
-                            }
-                        </div>
-
-                        {/* Progress bar while loading */}
-                        {!isComplete && totalToCheck > 0 && (
-                            <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-blue-500 transition-all duration-300"
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
-                        )}
-
-
-                    </>
+                {/* Progress bar while loading */}
+                {!isComplete && totalToCheck > 0 && (
+                    <div className="mt-2 w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-blue-500 transition-all duration-300"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
                 )}
             </div>
         </motion.div>
