@@ -115,9 +115,14 @@ export async function POST(request: Request) {
 
                         console.log(`[TOOL-CALLS] Resident lookup:`, { resident, error: residentError });
 
+                        // MVP Fallback: Use this chat ID if no liaison is configured
+                        const FALLBACK_TELEGRAM_CHAT_ID = '8414933635';
+                        let telegramChatId: string | null = null;
+
                         if (resident) {
-                            if (!resident.liaison_id) {
-                                console.warn(`[TOOL-CALLS] Resident has no liaison_id - cannot send Telegram alert`);
+                            if (!resident.liaison_id || resident.liaison_id === '00000000-0000-0000-0000-000000000000') {
+                                console.warn(`[TOOL-CALLS] Resident has no real liaison_id - using fallback`);
+                                telegramChatId = FALLBACK_TELEGRAM_CHAT_ID;
                             } else {
                                 // Get liaison's Telegram chat ID
                                 const { data: profile, error: profileError } = await supabaseAdmin
@@ -129,12 +134,17 @@ export async function POST(request: Request) {
                                 console.log(`[TOOL-CALLS] Profile lookup for liaison ${resident.liaison_id}:`, { profile, error: profileError });
 
                                 if (profile?.telegram_chat_id) {
-                                    console.log(`[TOOL-CALLS] Sending Telegram alert to ${profile.telegram_chat_id}...`);
-                                    await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
-                                    console.log(`[TOOL-CALLS] Telegram alert sent!`);
+                                    telegramChatId = profile.telegram_chat_id;
                                 } else {
-                                    console.warn(`[TOOL-CALLS] Liaison has no telegram_chat_id configured`);
+                                    console.warn(`[TOOL-CALLS] Liaison has no telegram_chat_id - using fallback`);
+                                    telegramChatId = FALLBACK_TELEGRAM_CHAT_ID;
                                 }
+                            }
+
+                            if (telegramChatId) {
+                                console.log(`[TOOL-CALLS] Sending Telegram alert to ${telegramChatId}...`);
+                                await sendDistressAlert(telegramChatId, resident.name, residentId);
+                                console.log(`[TOOL-CALLS] Telegram alert sent!`);
                             }
                         } else {
                             console.error(`[TOOL-CALLS] Could not find resident ${residentId}`);
@@ -252,9 +262,14 @@ export async function POST(request: Request) {
 
                                 console.log(`[END-OF-CALL] Resident lookup:`, { resident, error: residentError });
 
+                                // MVP Fallback: Use this chat ID if no liaison is configured
+                                const FALLBACK_TELEGRAM_CHAT_ID = '8414933635';
+                                let telegramChatId: string | null = null;
+
                                 if (resident) {
-                                    if (!resident.liaison_id) {
-                                        console.warn(`[END-OF-CALL] Resident has no liaison_id - cannot send Telegram alert`);
+                                    if (!resident.liaison_id || resident.liaison_id === '00000000-0000-0000-0000-000000000000') {
+                                        console.warn(`[END-OF-CALL] Resident has no real liaison_id - using fallback`);
+                                        telegramChatId = FALLBACK_TELEGRAM_CHAT_ID;
                                     } else {
                                         const { data: profile, error: profileError } = await supabaseAdmin
                                             .from('profiles')
@@ -265,12 +280,17 @@ export async function POST(request: Request) {
                                         console.log(`[END-OF-CALL] Profile lookup for liaison ${resident.liaison_id}:`, { profile, error: profileError });
 
                                         if (profile?.telegram_chat_id) {
-                                            console.log(`[END-OF-CALL] Sending Telegram alert to ${profile.telegram_chat_id}...`);
-                                            await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
-                                            console.log(`[END-OF-CALL] Telegram alert sent!`);
+                                            telegramChatId = profile.telegram_chat_id;
                                         } else {
-                                            console.warn(`[END-OF-CALL] Liaison has no telegram_chat_id configured`);
+                                            console.warn(`[END-OF-CALL] Liaison has no telegram_chat_id - using fallback`);
+                                            telegramChatId = FALLBACK_TELEGRAM_CHAT_ID;
                                         }
+                                    }
+
+                                    if (telegramChatId) {
+                                        console.log(`[END-OF-CALL] Sending Telegram alert to ${telegramChatId}...`);
+                                        await sendDistressAlert(telegramChatId, resident.name, residentId);
+                                        console.log(`[END-OF-CALL] Telegram alert sent!`);
                                     }
                                 } else {
                                     console.error(`[END-OF-CALL] Could not find resident ${residentId}`);
