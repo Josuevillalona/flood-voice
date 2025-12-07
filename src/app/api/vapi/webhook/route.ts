@@ -62,22 +62,43 @@ export async function POST(request: Request) {
                 const callMetadata = message.call?.metadata || {};
                 const residentId = callMetadata.residentId;
 
+                console.log(`[TOOL-CALLS] reportStatus called with:`, { status, summary, residentId, metadata: callMetadata });
+
                 if (residentId) {
-                    console.log(`Received Function Report for ${residentId}: ${status}`);
+                    console.log(`[TOOL-CALLS] Updating resident ${residentId} to status: ${status}`);
 
                     // Update Resident Status
-                    await supabaseAdmin
+                    const { error: updateError } = await supabaseAdmin
                         .from('residents')
                         .update({ status: status })
                         .eq('id', residentId);
 
+                    if (updateError) {
+                        console.error(`[TOOL-CALLS] Failed to update resident:`, updateError);
+                        return NextResponse.json({
+                            results: [{
+                                name: functionName,
+                                toolCallId: toolCallId,
+                                error: `Database update failed: ${updateError.message}`
+                            }]
+                        });
+                    }
+
+                    console.log(`[TOOL-CALLS] Resident updated, now logging call...`);
+
                     // Log the Call
-                    await supabaseAdmin.from('call_logs').insert({
+                    const { error: insertError } = await supabaseAdmin.from('call_logs').insert({
                         resident_id: residentId,
                         vapi_call_id: message.call?.id,
                         summary: summary,
                         risk_label: status
                     });
+
+                    if (insertError) {
+                        console.error(`[TOOL-CALLS] Failed to insert call log:`, insertError);
+                    } else {
+                        console.log(`[TOOL-CALLS] Call logged successfully`);
+                    }
 
                     // Trigger Alert if Distress
                     if (status === 'distress') {
