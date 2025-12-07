@@ -140,10 +140,6 @@ export async function POST(request: Request) {
                 customer: {
                     number: formattedPhone,
                 },
-                // CRITICAL: Tells Vapi where to send webhook events
-                serverUrl: process.env.NEXT_PUBLIC_APP_URL
-                    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/vapi/webhook`
-                    : 'https://flood-voice.vercel.app/api/vapi/webhook',
                 assistant: {
                     ...ASSISTANT_CONFIG,
                     firstMessage: "Hi, this is Flood Voice calling for " + resident.name + ". We are checking on your safety."
