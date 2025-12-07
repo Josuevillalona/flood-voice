@@ -27,39 +27,25 @@ export async function POST(request: Request) {
                         : message.functionCall.parameters)
                     : {};
             } else {
-                // New tool-calls format (VAPI documented structure)
-                // Log the raw message to see what Vapi actually sends
-                console.log('[TOOL-CALLS] Raw message structure:', JSON.stringify({
-                    toolCallList: message.toolCallList,
-                    toolWithToolCallList: message.toolWithToolCallList
-                }, null, 2));
-
-                // Try toolCallList first
+                // New tool-calls format (VAPI actual structure based on logs)
+                // Data is nested: toolCallList[0].function.name and .function.arguments
                 const toolCallList = message.toolCallList || [];
-                let firstCall = toolCallList[0];
+                const firstCall = toolCallList[0];
 
-                // Fallback to toolWithToolCallList if toolCallList is empty or has no name
-                if (!firstCall?.name && message.toolWithToolCallList?.length > 0) {
-                    console.log('[TOOL-CALLS] Falling back to toolWithToolCallList');
-                    const firstTool = message.toolWithToolCallList[0];
-                    firstCall = {
-                        name: firstTool.name,
-                        id: firstTool.toolCall?.id,
-                        parameters: firstTool.toolCall?.parameters
-                    };
-                }
-
-                if (firstCall && firstCall.name) {
-                    functionName = firstCall.name;
+                if (firstCall) {
+                    // Extract from the nested 'function' object
+                    functionName = firstCall.function?.name || firstCall.name || '';
                     toolCallId = firstCall.id || '';
-                    functionArgs = firstCall.parameters || {};
+                    functionArgs = firstCall.function?.arguments || firstCall.parameters || {};
 
-                    console.log('[TOOL-CALLS] Parsed successfully:', {
+                    console.log('[TOOL-CALLS] Parsed:', {
                         name: functionName,
                         id: toolCallId,
                         parameters: functionArgs
                     });
-                } else {
+                }
+
+                if (!functionName) {
                     console.error('[TOOL-CALLS] Could not extract function name from payload');
                     return NextResponse.json({
                         results: [{
