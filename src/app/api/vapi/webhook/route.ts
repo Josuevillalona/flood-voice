@@ -243,23 +243,37 @@ export async function POST(request: Request) {
                                     .eq('id', insertedLog.id);
 
                                 // Send Telegram Alert
-                                const { data: resident } = await supabaseAdmin
+                                console.log(`[END-OF-CALL] Looking up resident for Telegram alert...`);
+                                const { data: resident, error: residentError } = await supabaseAdmin
                                     .from('residents')
                                     .select('name, liaison_id')
                                     .eq('id', residentId)
                                     .single();
 
-                                if (resident) {
-                                    const { data: profile } = await supabaseAdmin
-                                        .from('profiles')
-                                        .select('telegram_chat_id')
-                                        .eq('id', resident.liaison_id)
-                                        .single();
+                                console.log(`[END-OF-CALL] Resident lookup:`, { resident, error: residentError });
 
-                                    if (profile?.telegram_chat_id) {
-                                        await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
-                                        console.log(`Distress alert sent for ${resident.name}`);
+                                if (resident) {
+                                    if (!resident.liaison_id) {
+                                        console.warn(`[END-OF-CALL] Resident has no liaison_id - cannot send Telegram alert`);
+                                    } else {
+                                        const { data: profile, error: profileError } = await supabaseAdmin
+                                            .from('profiles')
+                                            .select('telegram_chat_id')
+                                            .eq('id', resident.liaison_id)
+                                            .single();
+
+                                        console.log(`[END-OF-CALL] Profile lookup for liaison ${resident.liaison_id}:`, { profile, error: profileError });
+
+                                        if (profile?.telegram_chat_id) {
+                                            console.log(`[END-OF-CALL] Sending Telegram alert to ${profile.telegram_chat_id}...`);
+                                            await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
+                                            console.log(`[END-OF-CALL] Telegram alert sent!`);
+                                        } else {
+                                            console.warn(`[END-OF-CALL] Liaison has no telegram_chat_id configured`);
+                                        }
                                     }
+                                } else {
+                                    console.error(`[END-OF-CALL] Could not find resident ${residentId}`);
                                 }
                             }
                         }
