@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Waves, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Waves, ArrowRight } from 'lucide-react';
+import BlurText from '@/components/ui/BlurText';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -37,9 +38,23 @@ export default function LandingPage() {
 
         {/* Hero Text */}
         <div className="space-y-4">
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white">
-            Flood<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Voice.</span>
-          </h1>
+          <div className="flex justify-center items-baseline">
+            <BlurText
+              text="Flood"
+              delay={80}
+              animateBy="letters"
+              direction="top"
+              className="text-5xl md:text-7xl font-bold tracking-tight text-white"
+            />
+            <BlurText
+              text="Voice."
+              delay={80}
+              animateBy="letters"
+              direction="top"
+              startDelay={400}
+              className="text-5xl md:text-7xl font-bold tracking-tight text-cyan-400"
+            />
+          </div>
           <p className="text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
             The minimal-latency triage platform for community flood response.
             <br />

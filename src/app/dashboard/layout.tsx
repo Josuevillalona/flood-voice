@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Activity, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, Settings, LogOut, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils'; // Assuming you have this utility or use simple string concat
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -11,6 +11,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
     const navItems = [
         { name: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Live Calls', href: '/dashboard/calls', icon: Phone },
         { name: 'Residents Pod', href: '/dashboard/residents', icon: Users },
         { name: 'FloodNet Map', href: '/dashboard/map', icon: Activity },
         { name: 'Settings', href: '/dashboard/settings', icon: Settings },

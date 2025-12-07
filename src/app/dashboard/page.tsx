@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Phone, CheckCircle, Droplets } from 'lucide-react';
+import { AlertTriangle, Phone, CheckCircle, Droplets, BarChart3 } from 'lucide-react';
 import { FloodNetGraph } from '@/components/floodnet-graph';
-import { CallLogFeed } from '@/components/call-log-feed';
+import { PriorityQueue, UrgencyBreakdown, TagBreakdown, TrendSparkline } from '@/components/analytics';
 import { supabase } from '@/lib/supabase';
 
 export default function DashboardHome() {
@@ -181,20 +181,36 @@ export default function DashboardHome() {
                 </motion.div>
             </div>
 
-            {/* Live Feed & Data Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: FloodNet Graph */}
-                <div className="lg:col-span-2">
-                    <FloodNetGraph />
+            {/* Narrative to Numbers: Analytics Section */}
+            <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-cyan-400" />
+                    <h2 className="text-xl font-semibold text-white">Narrative to Numbers</h2>
+                    <span className="text-xs text-slate-500 ml-2">AI-analyzed call insights</span>
                 </div>
 
-                {/* Right: Live Triage Feed */}
-                <div className="glass-panel rounded-xl border border-white/5 flex flex-col h-[600px] overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/5 flex-shrink-0">
-                        <h3 className="text-sm font-semibold text-white">Live Call Feed</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left: Priority Queue + Sensor Network */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <PriorityQueue limit={10} />
+
+                        {/* Sensor Network - fills the gap */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Droplets className="w-4 h-4 text-blue-400" />
+                                <h3 className="text-sm font-semibold text-white">Sensor Network</h3>
+                            </div>
+                            <div className="h-[350px]">
+                                <FloodNetGraph />
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3">
-                        <CallLogFeed />
+
+                    {/* Right: Analytics Sidebar */}
+                    <div className="space-y-4">
+                        <UrgencyBreakdown />
+                        <TagBreakdown />
+                        <TrendSparkline weeks={4} />
                     </div>
                 </div>
             </div>
