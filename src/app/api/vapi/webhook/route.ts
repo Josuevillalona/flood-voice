@@ -102,23 +102,39 @@ export async function POST(request: Request) {
 
                     // Trigger Alert if Distress
                     if (status === 'distress') {
-                        const { data: resident } = await supabaseAdmin
+                        console.log(`[TOOL-CALLS] Distress detected! Looking up resident...`);
+
+                        const { data: resident, error: residentError } = await supabaseAdmin
                             .from('residents')
                             .select('name, liaison_id')
                             .eq('id', residentId)
                             .single();
 
-                        if (resident) {
-                            // Get liaison's Telegram chat ID
-                            const { data: profile } = await supabaseAdmin
-                                .from('profiles')
-                                .select('telegram_chat_id')
-                                .eq('id', resident.liaison_id)
-                                .single();
+                        console.log(`[TOOL-CALLS] Resident lookup:`, { resident, error: residentError });
 
-                            if (profile?.telegram_chat_id) {
-                                await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
+                        if (resident) {
+                            if (!resident.liaison_id) {
+                                console.warn(`[TOOL-CALLS] Resident has no liaison_id - cannot send Telegram alert`);
+                            } else {
+                                // Get liaison's Telegram chat ID
+                                const { data: profile, error: profileError } = await supabaseAdmin
+                                    .from('profiles')
+                                    .select('telegram_chat_id')
+                                    .eq('id', resident.liaison_id)
+                                    .single();
+
+                                console.log(`[TOOL-CALLS] Profile lookup for liaison ${resident.liaison_id}:`, { profile, error: profileError });
+
+                                if (profile?.telegram_chat_id) {
+                                    console.log(`[TOOL-CALLS] Sending Telegram alert to ${profile.telegram_chat_id}...`);
+                                    await sendDistressAlert(profile.telegram_chat_id, resident.name, residentId);
+                                    console.log(`[TOOL-CALLS] Telegram alert sent!`);
+                                } else {
+                                    console.warn(`[TOOL-CALLS] Liaison has no telegram_chat_id configured`);
+                                }
                             }
+                        } else {
+                            console.error(`[TOOL-CALLS] Could not find resident ${residentId}`);
                         }
                     }
 
