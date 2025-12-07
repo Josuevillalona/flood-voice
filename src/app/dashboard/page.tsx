@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Phone, CheckCircle, Droplets, BarChart3 } from 'lucide-react';
 import { FloodNetGraph } from '@/components/floodnet-graph';
-import { PriorityQueue, UrgencyBreakdown, TagBreakdown, TrendSparkline } from '@/components/analytics';
+import { FloodMap } from '@/components/flood-map';
+import { FloodingDetected } from '@/components/flooding-detected';
+import { UrgencyBreakdown, TagBreakdown, TrendSparkline } from '@/components/analytics';
 import { supabase } from '@/lib/supabase';
 
 export default function DashboardHome() {
-    const [isCalling, setIsCalling] = useState(false);
 
     // Real Data State
     const [stats, setStats] = useState({
@@ -78,50 +79,16 @@ export default function DashboardHome() {
         }
     };
 
-    const handleTrigger = async () => {
-        setIsCalling(true);
-        try {
-            const res = await fetch('/api/vapi/trigger', { method: 'POST' });
-            const data = await res.json();
-
-            if (res.ok) {
-                const failures = data.results?.filter((r: any) => !r.success) || [];
-                if (failures.length > 0) {
-                    alert(`Failed to call ${failures.length} resident(s). Error: ${failures[0].error}`);
-                } else {
-                    alert(`Emergency Check-in initiated for ${data.results?.length || 0} residents.`);
-                }
-            } else {
-                alert(`Failed to trigger calls: ${data.error || 'Unknown error'}`);
-            }
-        } catch (e: any) {
-            console.error(e);
-            alert(`Network error: ${e.message}`);
-        }
-        setIsCalling(false);
-    };
-
     return (
         <div className="space-y-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-white">Command Center</h1>
-                    <p className="text-slate-400">Real-time resident monitoring & flood alerts</p>
-                </div>
-
-                <button
-                    onClick={handleTrigger}
-                    disabled={isCalling}
-                    className="flex items-center gap-2 px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded-lg font-semibold transition-all shadow-[0_0_20px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <AlertTriangle className="w-5 h-5" />
-                    {isCalling ? 'Initiating...' : 'Trigger Emergency Check-in'}
-                </button>
+            <div>
+                <h1 className="text-3xl font-bold text-white">Command Center</h1>
+                <p className="text-slate-400">Real-time resident monitoring & flood alerts</p>
             </div>
 
             {/* Key Metrics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 {/* Flood Risk Card */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -138,6 +105,9 @@ export default function DashboardHome() {
                     <div className="text-3xl font-bold text-white mb-1">{stats.floodRisk}</div>
                     <div className="text-xs text-slate-400 opacity-80">Sensor depth: {stats.floodDepth.toFixed(2)} in</div>
                 </motion.div>
+
+                {/* Flooding Detected Card - NEW */}
+                <FloodingDetected />
 
                 {/* Distress Card */}
                 <motion.div
@@ -190,15 +160,16 @@ export default function DashboardHome() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left: Priority Queue + Sensor Network */}
+                    {/* Left: Map + Sensor Network */}
                     <div className="lg:col-span-2 space-y-6">
-                        <PriorityQueue limit={10} />
+                        {/* Flood Sensor Map */}
+                        <FloodMap className="h-[400px]" />
 
-                        {/* Sensor Network - fills the gap */}
+                        {/* Sensor Network Graph */}
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
                                 <Droplets className="w-4 h-4 text-blue-400" />
-                                <h3 className="text-sm font-semibold text-white">Sensor Network</h3>
+                                <h3 className="text-sm font-semibold text-white">Water Level History</h3>
                             </div>
                             <div className="h-[350px]">
                                 <FloodNetGraph />
