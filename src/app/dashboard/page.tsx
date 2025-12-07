@@ -8,8 +8,21 @@ import { FloodMap } from '@/components/flood-map';
 import { FloodingDetected } from '@/components/flooding-detected';
 import { UrgencyBreakdown, TagBreakdown, TrendSparkline } from '@/components/analytics';
 import { supabase } from '@/lib/supabase';
+import { useFlooding } from '@/contexts/flooding-context';
 
 export default function DashboardHome() {
+
+    // Use shared flooding context for city-wide flood data
+    const flooding = useFlooding();
+
+    // Calculate max depth and risk from all flooding sensors
+    const maxFloodDepth = flooding.floodingSensors.length > 0
+        ? Math.max(...flooding.floodingSensors.map(s => s.depth_in))
+        : 0;
+
+    const floodRisk: 'Low' | 'Moderate' | 'High' =
+        maxFloodDepth > 8 ? 'High' :
+            maxFloodDepth > 4 ? 'Moderate' : 'Low';
 
     // Real Data State
     const [stats, setStats] = useState({
@@ -17,12 +30,10 @@ export default function DashboardHome() {
         safe: 0,
         distress: 0,
         pending: 0,
-        floodDepth: 0.0,
-        floodRisk: 'Low' as 'Low' | 'Moderate' | 'High'
     });
 
     useEffect(() => {
-        fetchStats();
+        fetchResidentCounts();
 
         // Subscription for Resident Updates
         const channel = supabase
@@ -35,10 +46,6 @@ export default function DashboardHome() {
         return () => { supabase.removeChannel(channel); };
     }, []);
 
-    const fetchStats = async () => {
-        await Promise.all([fetchResidentCounts(), fetchFloodData()]);
-    };
-
     const fetchResidentCounts = async () => {
         const { data: residents } = await supabase.from('residents').select('status');
 
@@ -48,34 +55,12 @@ export default function DashboardHome() {
             const distress = residents.filter(r => r.status === 'distress').length;
             const pending = total - safe - distress; // Catch-all for other statuses
 
-            setStats(prev => ({
-                ...prev,
+            setStats({
                 totalResidents: total,
                 safe,
                 distress,
                 pending
-            }));
-        }
-    };
-
-    const fetchFloodData = async () => {
-        try {
-            const res = await fetch('/api/floodnet/history?deployment_id=dev_id_nyc_floodnet_deployment_1');
-            const data = await res.json();
-
-            // Get latest reading
-            if (data && data.length > 0) {
-                const latest = data[data.length - 1]; // Assuming sorted by time asc
-                const depth = latest.value || 0;
-
-                let risk: 'Low' | 'Moderate' | 'High' = 'Low';
-                if (depth > 4) risk = 'Moderate';
-                if (depth > 8) risk = 'High';
-
-                setStats(prev => ({ ...prev, floodDepth: depth, floodRisk: risk }));
-            }
-        } catch (e) {
-            console.error("Failed to fetch live flood data:", e);
+            });
         }
     };
 
@@ -94,16 +79,21 @@ export default function DashboardHome() {
                     initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
                     className={
                         `glass-panel p-6 rounded-xl border-l-4 transition-colors duration-500 ` +
-                        (stats.floodRisk === 'High' ? 'border-red-500 bg-red-900/10' :
-                            stats.floodRisk === 'Moderate' ? 'border-yellow-500' : 'border-blue-500')
+                        (floodRisk === 'High' ? 'border-red-500 bg-red-900/10' :
+                            floodRisk === 'Moderate' ? 'border-yellow-500' : 'border-blue-500')
                     }
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-slate-400 text-sm font-medium">Flood Risk</span>
-                        <Droplets className={"w-5 h-5 " + (stats.floodRisk === 'High' ? 'text-red-500' : stats.floodRisk === 'Moderate' ? 'text-yellow-500' : 'text-blue-500')} />
+                        <Droplets className={"w-5 h-5 " + (floodRisk === 'High' ? 'text-red-500' : floodRisk === 'Moderate' ? 'text-yellow-500' : 'text-blue-500')} />
                     </div>
-                    <div className="text-3xl font-bold text-white mb-1">{stats.floodRisk}</div>
-                    <div className="text-xs text-slate-400 opacity-80">Sensor depth: {stats.floodDepth.toFixed(2)} in</div>
+                    <div className="text-3xl font-bold text-white mb-1">{floodRisk}</div>
+                    <div className="text-xs text-slate-400 opacity-80">
+                        {flooding.floodingSensors.length > 0
+                            ? `Max depth: ${maxFloodDepth.toFixed(2)} in`
+                            : `${flooding.activeSensors} sensors clear`
+                        }
+                    </div>
                 </motion.div>
 
                 {/* Flooding Detected Card - NEW */}
