@@ -6,7 +6,7 @@ import { AlertTriangle, Phone, CheckCircle, Droplets, BarChart3 } from 'lucide-r
 import { FloodNetGraph } from '@/components/floodnet-graph';
 import { FloodMap } from '@/components/flood-map';
 import { FloodingDetected } from '@/components/flooding-detected';
-import { UrgencyBreakdown, TagBreakdown, TrendSparkline } from '@/components/analytics';
+import { UrgencyBreakdown, TagBreakdown, TrendSparkline, FloodEventHistory, FloodAnalytics } from '@/components/analytics';
 import { supabase } from '@/lib/supabase';
 import { useFlooding } from '@/contexts/flooding-context';
 
@@ -174,6 +174,12 @@ export default function DashboardHome() {
                         <TrendSparkline weeks={4} />
                     </div>
                 </div>
+
+                {/* NYC Open Data Analytics */}
+                <FloodAnalytics />
+
+                {/* Flood Event History — NYC Open Data */}
+                <FloodEventHistory />
             </div>
         </div>
     );
