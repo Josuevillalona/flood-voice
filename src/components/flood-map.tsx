@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { RefreshCw, MapPin, Waves, Search, Filter } from 'lucide-react';
+import { RefreshCw, MapPin, Waves, Search, Filter, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlooding } from '@/contexts/flooding-context';
 import type { SocrataSensorMetadata } from '@/lib/nyc-opendata';
@@ -22,8 +22,9 @@ function inferBorough(sensorName: string): string | undefined {
     return prefix ? BOROUGH_PREFIX_MAP[prefix] : undefined;
 }
 
-// Set the Mapbox access token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+// Set the Mapbox access token (validated below before use)
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+const TOKEN_VALID = MAPBOX_TOKEN.startsWith('pk.');
 
 interface Sensor {
     deployment_id: string;
@@ -74,6 +75,10 @@ export function FloodMap({ className }: { className?: string }) {
     const [showFloodingOnly, setShowFloodingOnly] = useState(false);
     const [showActiveOnly, setShowActiveOnly] = useState(true); // Default to active only
     const hasFlyToFlooding = useRef(false);
+
+    // FEMA flood zone layer toggle
+    const [showFemaZones, setShowFemaZones] = useState(false);
+    const [femaLoading, setFemaLoading] = useState(false);
 
     // NYC center coordinates
     const NYC_CENTER: [number, number] = [-73.935242, 40.730610];
@@ -127,8 +132,9 @@ export function FloodMap({ className }: { className?: string }) {
 
     // Initialize map
     useEffect(() => {
-        if (!mapContainer.current || map.current) return;
+        if (!mapContainer.current || map.current || !TOKEN_VALID) return;
 
+        mapboxgl.accessToken = MAPBOX_TOKEN;
         map.current = new mapboxgl.Map({
             container: mapContainer.current,
             style: 'mapbox://styles/mapbox/dark-v11',
@@ -325,6 +331,71 @@ export function FloodMap({ className }: { className?: string }) {
         }
     }, [sensors, floodingData, mapLoaded, searchQuery, showFloodingOnly, showActiveOnly, boroughFilter, sensorMetadata]);
 
+    // FEMA zone layer — add/remove based on toggle
+    useEffect(() => {
+        if (!map.current || !mapLoaded) return;
+
+        const FEMA_SOURCE = 'fema-zones';
+        const FEMA_FILL = 'fema-zones-fill';
+        const FEMA_OUTLINE = 'fema-zones-outline';
+
+        const removeFemaLayers = () => {
+            if (map.current!.getLayer(FEMA_OUTLINE)) map.current!.removeLayer(FEMA_OUTLINE);
+            if (map.current!.getLayer(FEMA_FILL)) map.current!.removeLayer(FEMA_FILL);
+            if (map.current!.getSource(FEMA_SOURCE)) map.current!.removeSource(FEMA_SOURCE);
+        };
+
+        if (!showFemaZones) {
+            removeFemaLayers();
+            return;
+        }
+
+        if (map.current.getSource(FEMA_SOURCE)) return;
+
+        setFemaLoading(true);
+        fetch('/api/fema/zones')
+            .then(r => r.json())
+            .then(geojson => {
+                if (!map.current || map.current.getSource(FEMA_SOURCE)) return;
+                map.current.addSource(FEMA_SOURCE, { type: 'geojson', data: geojson });
+
+                map.current.addLayer({
+                    id: FEMA_FILL,
+                    type: 'fill',
+                    source: FEMA_SOURCE,
+                    paint: {
+                        'fill-color': [
+                            'match', ['get', 'FLD_ZONE'],
+                            'VE', 'rgba(239,68,68,0.25)',
+                            'AE', 'rgba(59,130,246,0.18)',
+                            'AO', 'rgba(168,85,247,0.18)',
+                            'AH', 'rgba(168,85,247,0.18)',
+                            'A',  'rgba(59,130,246,0.12)',
+                            'rgba(0,0,0,0)'
+                        ],
+                        'fill-opacity': 1,
+                    },
+                }, 'waterway-label');
+
+                map.current.addLayer({
+                    id: FEMA_OUTLINE,
+                    type: 'line',
+                    source: FEMA_SOURCE,
+                    paint: {
+                        'line-color': [
+                            'match', ['get', 'FLD_ZONE'],
+                            'VE', 'rgba(239,68,68,0.7)',
+                            'AE', 'rgba(59,130,246,0.5)',
+                            'rgba(0,0,0,0)'
+                        ],
+                        'line-width': 1,
+                    },
+                }, 'waterway-label');
+            })
+            .catch(err => console.error('FEMA layer error:', err))
+            .finally(() => setFemaLoading(false));
+    }, [showFemaZones, mapLoaded]);
+
     const activeCount = sensors.filter(s => s.sensor_status === 'good').length;
     const offlineCount = sensors.filter(s => ['dead', 'retired'].includes(s.sensor_status)).length;
 
@@ -426,6 +497,38 @@ export function FloodMap({ className }: { className?: string }) {
                     )}
                 </button>
 
+                {/* FEMA Zones Toggle */}
+                <button
+                    onClick={() => setShowFemaZones(!showFemaZones)}
+                    disabled={femaLoading}
+                    className={cn(
+                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
+                        showFemaZones
+                            ? "bg-blue-500/30 border border-blue-400 text-blue-300"
+                            : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
+                    )}
+                    title="Toggle FEMA flood zone overlay"
+                >
+                    {femaLoading ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                        <Waves className="w-3 h-3" />
+                    )}
+                    FEMA Zones
+                </button>
+
+                {/* FloodNet Full Dashboard Link */}
+                <a
+                    href="https://dataviz.floodnet.nyc"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-400/50 rounded transition-all bg-blue-500/5 hover:bg-blue-500/10"
+                    title="Open full FloodNet dashboard"
+                >
+                    <ExternalLink className="w-3 h-3" />
+                    Full Dashboard
+                </a>
+
                 {/* Refresh Button */}
                 <button
                     onClick={fetchData}
@@ -448,8 +551,21 @@ export function FloodMap({ className }: { className?: string }) {
                     style={{ width: '100%', height: '100%' }}
                 />
 
+                {/* No token overlay */}
+                {!TOKEN_VALID && (
+                    <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-10 gap-3 text-center px-6">
+                        <MapPin className="w-8 h-8 text-slate-500" />
+                        <p className="text-sm font-medium text-slate-300">Map unavailable</p>
+                        <p className="text-xs text-slate-500 max-w-xs">
+                            Add your Mapbox token to <code className="text-blue-400">.env.local</code> as{' '}
+                            <code className="text-blue-400">NEXT_PUBLIC_MAPBOX_TOKEN</code>. Free tokens at{' '}
+                            <a href="https://account.mapbox.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">mapbox.com</a>.
+                        </p>
+                    </div>
+                )}
+
                 {/* Loading overlay */}
-                {isLoading && !mapLoaded && (
+                {TOKEN_VALID && isLoading && !mapLoaded && (
                     <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center z-10">
                         <span className="text-sm text-blue-400">Loading map...</span>
                     </div>
@@ -457,6 +573,7 @@ export function FloodMap({ className }: { className?: string }) {
 
                 {/* Legend */}
                 <div className="absolute bottom-4 left-4 glass-panel p-3 rounded-lg text-xs space-y-1.5 z-10">
+                    <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mb-2">Sensors</div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-green-500 border border-white/50" />
                         <span className="text-slate-300">Active</span>
@@ -477,6 +594,23 @@ export function FloodMap({ className }: { className?: string }) {
                         <div className="w-3 h-3 rounded-full bg-sky-500/30 border-2 border-sky-400" />
                         <span className="text-slate-300">Tidal</span>
                     </div>
+                    {showFemaZones && (
+                        <>
+                            <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-3 mb-1">FEMA Zones</div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded bg-red-500/50 border border-red-400/70" />
+                                <span className="text-slate-300">VE — Coastal</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded bg-blue-500/40 border border-blue-400/60" />
+                                <span className="text-slate-300">AE — 100-yr</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded bg-purple-500/40 border border-purple-400/60" />
+                                <span className="text-slate-300">AO/AH — Shallow</span>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 

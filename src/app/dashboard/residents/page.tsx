@@ -13,10 +13,36 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { Plus, User, Phone, MapPin, Languages, Activity, Trash2, Edit2, PhoneCall, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getZipPriorityOrder, getNeighborhoodByZip, TIER_CONFIG } from '@/lib/neighborhoods';
+import { ResidentIntakeDialog } from '@/components/resident-intake-dialog';
+
+// ─── Sort helpers ─────────────────────────────────────────────────────────────
+
+const STATUS_ORDER: Record<string, number> = {
+    distress:    0,
+    unresponsive: 1,
+    pending:     2,
+    safe:        3,
+    unaffected:  3,
+};
+
+function sortResidents(list: Resident[]): Resident[] {
+    return [...list].sort((a, b) => {
+        // 1st: Ida neighborhood priority (lower = higher priority; 999 = not mapped)
+        const nA = getZipPriorityOrder(a.zip_code);
+        const nB = getZipPriorityOrder(b.zip_code);
+        if (nA !== nB) return nA - nB;
+        // 2nd: status urgency
+        const sA = STATUS_ORDER[a.status] ?? 4;
+        const sB = STATUS_ORDER[b.status] ?? 4;
+        if (sA !== sB) return sA - sB;
+        // 3rd: alphabetical
+        return a.name.localeCompare(b.name);
+    });
+}
 
 // Type definition
 type Resident = {
@@ -35,6 +61,7 @@ export default function ResidentsPage() {
     const [residents, setResidents] = useState<Resident[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
+    const [isIntakeOpen, setIsIntakeOpen] = useState(false);
 
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -56,12 +83,11 @@ export default function ResidentsPage() {
 
     const fetchResidents = async () => {
         setIsLoading(true);
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('residents')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('*');
 
-        if (data) setResidents(data as Resident[]);
+        if (data) setResidents(sortResidents(data as Resident[]));
         setIsLoading(false);
     };
 
@@ -204,15 +230,23 @@ export default function ResidentsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-white">Your Pod</h1>
-                    <p className="text-slate-400">Manage the vulnerable residents you are responsible for.</p>
+                    <p className="text-slate-400 mt-1">
+                        Sorted by <span className="text-blue-400 font-medium">Ida neighborhood priority</span> → status urgency.
+                        Tier 1 residents appear first.
+                    </p>
                 </div>
 
+                <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setIsIntakeOpen(true)}>
+                    <Plus className="w-4 h-4" /> Add Resident
+                </Button>
+
+                <ResidentIntakeDialog
+                    open={isIntakeOpen}
+                    onOpenChange={setIsIntakeOpen}
+                    onSaved={fetchResidents}
+                />
+
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="gap-2 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateClick}>
-                            <Plus className="w-4 h-4" /> Add Resident
-                        </Button>
-                    </DialogTrigger>
                     <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
                         <DialogHeader>
                             <DialogTitle>{editingId ? 'Edit Profile' : 'Add New Resident'}</DialogTitle>
@@ -315,7 +349,21 @@ export default function ResidentsPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-white text-lg">{resident.name}</h3>
-                                        {resident.age && <span className="text-xs text-slate-500">{resident.age} years old</span>}
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                            {resident.age && (
+                                                <span className="text-xs text-slate-500">{resident.age} yrs</span>
+                                            )}
+                                            {(() => {
+                                                const hood = getNeighborhoodByZip(resident.zip_code ?? '');
+                                                if (!hood) return null;
+                                                const tier = TIER_CONFIG[hood.priority_tier];
+                                                return (
+                                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tier.bg} ${tier.color}`}>
+                                                        {tier.shortLabel} · {hood.name}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className={cn(
@@ -348,7 +396,7 @@ export default function ResidentsPage() {
                                     </div>
                                 )}
                                 {resident.health_conditions && (
-                                    <div className="flex items-start gap-2 text-xs text-yellow-500/90 bg-yellow-500/5 p-2 rounded mt-2">
+                                    <div className="flex items-start gap-2 text-xs text-orange-500 bg-orange-500/10 p-2 rounded mt-2">
                                         <Activity className="w-4 h-4 mt-0.5 shrink-0" />
                                         <span>{resident.health_conditions}</span>
                                     </div>
