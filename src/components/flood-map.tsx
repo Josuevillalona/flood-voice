@@ -359,6 +359,11 @@ export function FloodMap({ className }: { className?: string }) {
                 if (!map.current || map.current.getSource(FEMA_SOURCE)) return;
                 map.current.addSource(FEMA_SOURCE, { type: 'geojson', data: geojson });
 
+                // Fill opacities tuned for the dark-v11 base map — translucent enough
+                // to read place names through, opaque enough to be obvious from across
+                // the room. Visual hierarchy matches risk hierarchy: VE (coastal high
+                // velocity) > AE (1% annual) > AO/AH (shallow) > A (approximate, mapped
+                // without depth detail). A uses cyan to stay distinct from AE's blue.
                 map.current.addLayer({
                     id: FEMA_FILL,
                     type: 'fill',
@@ -366,11 +371,11 @@ export function FloodMap({ className }: { className?: string }) {
                     paint: {
                         'fill-color': [
                             'match', ['get', 'FLD_ZONE'],
-                            'VE', 'rgba(239,68,68,0.25)',
-                            'AE', 'rgba(59,130,246,0.18)',
-                            'AO', 'rgba(168,85,247,0.18)',
-                            'AH', 'rgba(168,85,247,0.18)',
-                            'A',  'rgba(59,130,246,0.12)',
+                            'VE', 'rgba(239,68,68,0.55)',
+                            'AE', 'rgba(59,130,246,0.40)',
+                            'AO', 'rgba(168,85,247,0.40)',
+                            'AH', 'rgba(168,85,247,0.40)',
+                            'A',  'rgba(34,211,238,0.30)',
                             'rgba(0,0,0,0)'
                         ],
                         'fill-opacity': 1,
@@ -384,11 +389,14 @@ export function FloodMap({ className }: { className?: string }) {
                     paint: {
                         'line-color': [
                             'match', ['get', 'FLD_ZONE'],
-                            'VE', 'rgba(239,68,68,0.7)',
-                            'AE', 'rgba(59,130,246,0.5)',
+                            'VE', 'rgba(239,68,68,0.85)',
+                            'AE', 'rgba(59,130,246,0.75)',
+                            'AO', 'rgba(168,85,247,0.75)',
+                            'AH', 'rgba(168,85,247,0.75)',
+                            'A',  'rgba(34,211,238,0.70)',
                             'rgba(0,0,0,0)'
                         ],
-                        'line-width': 1,
+                        'line-width': 1.5,
                     },
                 }, 'waterway-label');
             })
@@ -598,16 +606,20 @@ export function FloodMap({ className }: { className?: string }) {
                         <>
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-3 mb-1">FEMA Zones</div>
                             <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-red-500/50 border border-red-400/70" />
-                                <span className="text-slate-300">VE — Coastal</span>
+                                <div className="w-3 h-3 rounded bg-red-500/60 border border-red-400/80" />
+                                <span className="text-slate-300">VE — Coastal high velocity</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-blue-500/40 border border-blue-400/60" />
-                                <span className="text-slate-300">AE — 100-yr</span>
+                                <div className="w-3 h-3 rounded bg-blue-500/50 border border-blue-400/75" />
+                                <span className="text-slate-300">AE — 1% annual chance</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-purple-500/40 border border-purple-400/60" />
-                                <span className="text-slate-300">AO/AH — Shallow</span>
+                                <div className="w-3 h-3 rounded bg-purple-500/50 border border-purple-400/75" />
+                                <span className="text-slate-300">AO / AH — Shallow flooding</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded bg-cyan-500/40 border border-cyan-400/70" />
+                                <span className="text-slate-300">A — Approximate</span>
                             </div>
                         </>
                     )}
