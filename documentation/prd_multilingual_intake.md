@@ -25,16 +25,15 @@ Resident intake form already toggles between English / Spanish / Bengali / Manda
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| L1 | Fix invalid language-code submission on standalone page (`src/app/dashboard/intake/page.tsx:237`): replace `slice(0,2)` derivation with explicit `PREF_LANG_CODES` map matching the dialog's approach | Todo |
-| L2 | Translate the hardcoded `"Type full name"` placeholder (`intake/page.tsx:407`, `resident-intake-dialog.tsx:482`) — add `signaturePlaceholder` key to `T` for all 4 languages | Todo |
-| L3 | Persist canvasser-selected language across intake sessions: store last selected `lang` in `localStorage` under `floodvoice.intakeLang`; rehydrate on page mount and on dialog open instead of hardcoding `'en'` (`resident-intake-dialog.tsx:191`) | Todo |
-| L4 | Preserve mid-form language switch behavior (already works) — add a regression test or manual verification step that switching tabs after partial entry does not clear `form` state | Todo |
-| L5 | Tablet readability pass: bump section-header / helper-text from `text-[11px]` to `text-sm`, inputs from `text-[13px]` to `text-base`, radio/checkbox tap area from 14px to 24px (with 44px+ label hit area), input vertical padding from `py-1.5` to `py-2.5` | Todo |
-| L6 | Replace native `alert()` validation (`intake/page.tsx:226`, `resident-intake-dialog.tsx:218`) with inline banner above the submit button, translated for all supported languages | Todo |
-| L7 | Extract the duplicated `T` and `TAB_LABEL` objects into a single shared module (e.g., `src/lib/intake-translations.ts`) consumed by both the page and the dialog — eliminates drift | Todo |
-| L8 | Verify Section 6 consent paragraph for legal review in en/es/bn/zh — flag any string not yet reviewed by a human translator | Todo |
+| L1 | When a resident's registration is submitted, the **preferred language is saved correctly** so future welfare-check calls go out in the right language. (Today, on one of the two intake screens, picking Bengali or Mandarin saves an invalid value to the database — silently breaking the resident's language preference.) | Todo |
+| L2 | **Every piece of text inside a form field**, including hint text like "Type full name" beneath the signature line, appears in the selected language — not English. | Todo |
+| L3 | When a canvasser finishes one resident's intake and starts another, **the form opens in the language they last used**, not English. They don't have to re-pick "বাংলা" for every resident in a Bengali-speaking neighborhood. | Todo |
+| L4 | **Switching languages partway through an intake never clears data already entered.** This works today; the requirement is to make sure it stays working. | Todo |
+| L5 | On a tablet held at arm's length, **every label and helper text is easily readable**, and every tap target — radio buttons, checkboxes, input fields — is **large enough to hit reliably with a finger**, not a stylus. | Todo |
+| L6 | **The translated form labels are stored in one shared file** instead of being copy-pasted into two. So fixing a typo in the Spanish word for "Date of birth," or rewording a Bengali label, only has to happen once. (Today the standalone intake page and the dialog version each carry their own copy of every translated label, and they can silently drift apart. No live translation is involved — all the text is pre-written and static.) | Todo |
+| L7 | **The Section 6 consent paragraph has been reviewed by a human translator** in every supported language. No machine translation, since this is what the resident is legally agreeing to. | Todo |
 
-**Why:** The existing 4-language toggle is mostly correct in *content* but wrong in 3 places that bite users: the standalone page submits broken language codes, the dialog forgets your choice every time, and one English placeholder leaks through every translation. Tablet ergonomics matter because the canvasser uses this in the field — and we can't ship Phase 2 (more tabs) on top of a layout that's already tight.
+**Why:** The existing 4-language toggle gets the visible content roughly right but breaks in three places that bite users: one of the intake screens silently saves the wrong language code, the form forgets the canvasser's chosen language between residents, and one English hint text leaks through every translation. Tablet legibility matters because the canvasser uses this in the field — and adding two more languages (Phase 2) on top of an already-tight layout would only make it worse.
 
 ---
 
@@ -42,13 +41,13 @@ Resident intake form already toggles between English / Spanish / Bengali / Manda
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| L9 | Add `ko` and `ht` entries to the shared translation module from L7, covering the full key set (no fallbacks to English) | Todo |
-| L10 | Extend `LANG_CODES` and the tab toggle UI to render 6 tabs (en / es / bn / zh / ko / ht) in both the page and dialog | Todo |
-| L11 | Tab toggle remains usable at 6 tabs on a 768px-wide tablet without truncation or wrap — may require shorter tab labels (e.g., "Kreyòl" instead of "Haitian Creole") or a horizontal scroll affordance | Todo |
-| L12 | Section 5 "Preferred language" checkbox set already includes `ko` and `ht` — verify no change needed and that submitted code matches the new tab code (post-L1 fix) | Todo |
-| L13 | Consent paragraph (Section 6) reviewed by a human translator for ko and ht before merge | Todo |
+| L8 | **Korean and Haitian Creole are added as full languages.** Every label, button, hint text, error message, and consent paragraph is translated. No English leaks through anywhere. | Todo |
+| L9 | **All 6 language tabs** (English, Spanish, Bengali, Mandarin, Korean, Haitian Creole) appear at the top of the form, and the canvasser can switch to any of them with one tap. | Todo |
+| L10 | **All 6 tabs fit on a tablet screen without truncation.** Long names use shorter native versions where needed ("Kreyòl" instead of "Haitian Creole", "한국어" instead of "Korean") so nothing gets cut off. | Todo |
+| L11 | The "Preferred language" checkboxes in Section 5 already offer all 6 languages — confirm they still work, and that picking Korean or Haitian Creole as a resident's preference saves the right value. | Todo |
+| L12 | **Korean and Haitian Creole consent paragraphs are reviewed by a human translator** before they ship. Same legal-accuracy standard as the other languages (L7). | Todo |
 
-**Why:** The resident-preference field already offers Korean and Haitian Creole, and the PDF spec lists them. The actual gap is tab coverage — and Phase 1's tablet pass is what makes 6 tabs viable.
+**Why:** The resident-preference checkboxes (Section 5) already list Korean and Haitian Creole, so a canvasser working with a Korean speaker today can record their language preference — but can't actually present the rest of the form in their language. Phase 2 closes that gap. The tablet legibility work in Phase 1 is what makes fitting 6 tabs across the top feasible without crowding.
 
 ---
 
@@ -76,14 +75,13 @@ No schema changes. `language` column already accepts 2-letter codes; `ko` and `h
 
 ```
 Phase 1 — Fix & fortify en/es/bn/zh (correctness, persistence, tablet UX, dedupe)
-  └── Phase 2 — Add ko + ht tabs (depends on shared translation module from L7 and tablet sizing from L5)
+  └── Phase 2 — Add ko + ht tabs (depends on shared translation module from L6 and tablet sizing from L5)
 ```
 
 ---
 
 ## 6. Open Questions
 
-- Tab labels at 6-tab width: do we use native short labels ("Kreyòl", "한국어") or accept horizontal scroll? Decide during L11.
-- Who is the human translator for the Korean and Haitian Creole consent paragraph (L13)? Same person who did es/bn/zh, or do we need new resources?
-- Should the canvasser's persisted language (L3) be per-canvasser (account-scoped, server-side) or per-device (`localStorage`)? Starting with `localStorage` for simplicity — revisit if canvassers share tablets.
-- Does "language from last section persists to next" also imply we should auto-set the *resident's* preferred_language checkbox to match the canvasser's selected tab? Currently they're independent — flag as a potential UX simplification.
+- **Who reviews the consent paragraph translations?** A human translator is required for legal accuracy (L7, L12). Is the existing translator who did Spanish / Bengali / Mandarin available for Korean and Haitian Creole, or do we need to source new ones? This is the slowest part of the PRD.
+- **Where does the canvasser's last-used language get remembered (L3)?** Saved on the tablet itself (so the language preference travels with that device, but not across devices), or saved against the canvasser's account (so it follows them to any device they sign in on). Saving on the tablet is simpler; the account-level choice matters if canvassers share tablets between shifts.
+- **Should picking the form language also auto-check the resident's matching "Preferred language" checkbox** in Section 5? Today the canvasser tab and the resident-preference checkbox are independent — a canvasser switching to Bengali doesn't automatically mark the resident as a Bengali speaker. Flagging as a possible UX simplification, but not assumed.
