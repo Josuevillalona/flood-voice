@@ -66,8 +66,9 @@ These four languages mirror Phase 1 of the [multilingual intake PRD](./prd_multi
 | V13 | **Three reference answers (calm / uncertain / distress) are written in Korean and Haitian Creole** and added under `documentation/transcription_tests/`. | Todo |
 | V14 | **A native Korean speaker and a native Haitian Creole speaker take the same test as V6** — taking a real welfare-check call and reading each reference answer aloud — and results are logged alongside the Phase 1 numbers. | Todo |
 | V15 | **Korean and Haitian Creole each start with an accuracy bar of ≥75% on clean audio**, revisited once real numbers come in. | Todo |
+| V16 | **Stored transcripts include only the resident's speech, not the AI's questions or replies.** Vapi's transcript artifact today contains both sides of the conversation; we parse it to keep only the resident-spoken turns when writing to `call_logs.transcript` (and likewise `call_logs.transcript_english`). The full conversation audio stays in `call_logs.recording_url` for any case where the AI's questions need to be reconstructed. Rationale: the resident's words are what V7 measures accuracy against, and what a liaison cares about reading; the AI's questions are deterministic and known from the system prompt, so storing them as text adds noise without information. | Todo |
 
-**Why split out:** Korean and Haitian Creole carry higher technical risk than the four Phase 1 languages — Haitian Creole in particular is patchily supported across speech-recognition providers. Splitting it out lets Phase 1 ship without that uncertainty resolved.
+**Why split out:** Korean and Haitian Creole carry higher technical risk than the four Phase 1 languages — Haitian Creole in particular is patchily supported across speech-recognition providers. Splitting it out lets Phase 1 ship without that uncertainty resolved. V16 (resident-only transcript filtering) is bundled into Phase 2 because it cleans up the transcript-comparison step (V7) before we add two more languages whose accuracy numbers we'll be quoting; doing it once benefits all six languages, but it's not Phase 1 critical-path.
 
 ---
 
@@ -75,10 +76,10 @@ These four languages mirror Phase 1 of the [multilingual intake PRD](./prd_multi
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| V16 | **The three-answer test is repeated for each language under three real-world noise conditions:** heavy rain audio playing nearby, an indoor TV/radio at conversation volume, and sirens. The speaker is physically in the noise environment so the phone microphone picks it up the same way it would during a real flood. | Todo |
-| V17 | **Accuracy under each noise condition is recorded** alongside the clean-audio baseline, broken out by language × noise type × reference answer. | Todo |
-| V18 | **Acceptable drop in accuracy under noise: no more than 15 percentage points** below the clean baseline for that language. Any combination that drops further is flagged for fixing. | Todo |
-| V19 | **If any combination fails the threshold, the call platform's noise-suppression and silence-detection settings are tried**, and results are recorded. | Todo |
+| V17 | **The three-answer test is repeated for each language under three real-world noise conditions:** heavy rain audio playing nearby, an indoor TV/radio at conversation volume, and sirens. The speaker is physically in the noise environment so the phone microphone picks it up the same way it would during a real flood. | Todo |
+| V18 | **Accuracy under each noise condition is recorded** alongside the clean-audio baseline, broken out by language × noise type × reference answer. | Todo |
+| V19 | **Acceptable drop in accuracy under noise: no more than 15 percentage points** below the clean baseline for that language. Any combination that drops further is flagged for fixing. | Todo |
+| V20 | **If any combination fails the threshold, the call platform's noise-suppression and silence-detection settings are tried**, and results are recorded. | Todo |
 
 **Why:** Real flood conditions mean rain on metal roofs, sirens outside, indoor TVs left on. Studio-clean numbers are misleading. This phase produces the metric we'd actually quote to a city partner.
 
@@ -88,9 +89,9 @@ These four languages mirror Phase 1 of the [multilingual intake PRD](./prd_multi
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| V20 | **For each language, 2–3 native speakers listen to a 30-second recording of the call speaking their language** and rate it 1–5 on naturalness — does it sound like a real person, is the pacing right, is the accent authentic. | Todo |
-| V21 | **The average naturalness rating is recorded per language.** Any language scoring **below 3.5** triggers an audition of alternative voices and a re-rating round. | Todo |
-| V22 | **Once a language reaches an average rating of ≥3.5, its voice selection is locked in.** | Todo |
+| V21 | **For each language, 2–3 native speakers listen to a 30-second recording of the call speaking their language** and rate it 1–5 on naturalness — does it sound like a real person, is the pacing right, is the accent authentic. | Todo |
+| V22 | **The average naturalness rating is recorded per language.** Any language scoring **below 3.5** triggers an audition of alternative voices and a re-rating round. | Todo |
+| V23 | **Once a language reaches an average rating of ≥3.5, its voice selection is locked in.** | Todo |
 
 **Why:** Marked P2 — accuracy first, accent second. A robotic-sounding Bengali voice that transcribes correctly is still useful in a flood emergency. The reverse is not.
 

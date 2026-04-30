@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendDistressAlert } from '@/lib/telegram';
-import { analyzeTranscript } from '@/lib/gemini';
+import { analyzeTranscript, translateToEnglish } from '@/lib/gemini';
 
 export async function POST(request: Request) {
     try {
@@ -192,9 +192,27 @@ export async function POST(request: Request) {
 
             const callMetadata = payload.message.call?.metadata || {};
             const residentId = callMetadata.residentId;
+            const callLanguage = callMetadata.language || 'en'; // Set by trigger/route.ts; defaults to en for legacy calls
 
             if (residentId) {
                 console.log(`End of Call Report for ${residentId}: ${summary}`);
+
+                // Produce English version of transcript for liaison readability (PRD V2).
+                // Original-language transcript remains the source of truth.
+                let transcriptEnglish: string | null = null;
+                if (transcript) {
+                    if (callLanguage === 'en') {
+                        transcriptEnglish = transcript;
+                    } else {
+                        try {
+                            transcriptEnglish = await translateToEnglish(transcript, callLanguage);
+                        } catch (translationError: unknown) {
+                            const message = translationError instanceof Error ? translationError.message : String(translationError);
+                            console.error(`Translation to English failed for ${callLanguage} transcript:`, message);
+                            // Leave transcriptEnglish null; liaison falls back to original-language version.
+                        }
+                    }
+                }
 
                 // Insert Log with Artifacts (initial insert)
                 const { data: insertedLog, error: insertError } = await supabaseAdmin
@@ -205,7 +223,8 @@ export async function POST(request: Request) {
                         summary: summary,
                         risk_label: 'safe', // Default to safe, will update if distress detected
                         recording_url: recordingUrl,
-                        transcript: transcript
+                        transcript: transcript,
+                        transcript_english: transcriptEnglish
                     })
                     .select('id')
                     .single();
@@ -215,8 +234,8 @@ export async function POST(request: Request) {
                     throw insertError;
                 }
 
-                // 3. Run AI Analysis if we have transcript or summary
-                const textToAnalyze = transcript || summary;
+                // 3. Run AI Analysis on English text when available — Gemini's tag taxonomy is English-tuned.
+                const textToAnalyze = transcriptEnglish || transcript || summary;
                 if (textToAnalyze && insertedLog) {
                     try {
                         console.log(`Running AI analysis for call ${insertedLog.id}...`);

@@ -54,7 +54,7 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
          - If uncertain, default to "Safe".
       
       3. KEY TOPICS:
-         - Write a 1-sentence summary (max 15 words) focusing on NEEDS.
+         - Write a 1-sentence summary in English (max 15 words) focusing on NEEDS. Always English, even if the transcript is in another language.
       
       OUTPUT JSON FORMAT:
       {
@@ -99,5 +99,64 @@ export async function analyzeTranscript(transcript: string): Promise<CallAnalysi
 
     // All models exhausted
     throw new Error(`All Gemini models rate limited. Please try again later. Last error: ${lastError?.message || lastError}`);
+}
+
+const LANG_CODE_TO_NAME: Record<string, string> = {
+    en: "English",
+    es: "Spanish",
+    bn: "Bengali",
+    zh: "Mandarin Chinese",
+    ko: "Korean",
+    ht: "Haitian Creole",
+};
+
+// Translate a non-English transcript into English for liaison readability.
+// Returns null on failure (caller should fall back to storing the original-language transcript only).
+// The original-language transcript remains the source of truth for accuracy proofing — see PRD V2/V7.
+export async function translateToEnglish(text: string, sourceLanguageCode: string): Promise<string | null> {
+    if (!text || !text.trim()) return null;
+    if (sourceLanguageCode === 'en') return text;
+
+    if (!API_KEY) {
+        console.error("Gemini API Key missing");
+        return null;
+    }
+
+    const sourceLanguageName = LANG_CODE_TO_NAME[sourceLanguageCode] ?? sourceLanguageCode;
+
+    const MODELS = [
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash"
+    ];
+
+    const prompt = `Translate the following ${sourceLanguageName} transcript of a phone call into natural, fluent English. Preserve meaning and tone exactly. If the transcript contains turn markers (e.g., "Speaker A:", "AI:", "User:"), keep them. Output only the translation — no preamble, no notes, no quotes.
+
+TRANSCRIPT:
+${text}`;
+
+    let lastError: unknown = null;
+
+    for (const modelName of MODELS) {
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            const translated = result.response.text().trim();
+            if (translated) return translated;
+        } catch (error: unknown) {
+            lastError = error;
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('429') || message.includes('quota')) {
+                continue;
+            }
+            console.error(`Translation failed on ${modelName}:`, message);
+            return null;
+        }
+    }
+
+    const lastMessage = lastError instanceof Error ? lastError.message : String(lastError);
+    console.error(`All Gemini models rate limited for translation. Last error: ${lastMessage}`);
+    return null;
 }
 
