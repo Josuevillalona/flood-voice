@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { RefreshCw, MapPin, Waves, Search, Filter, ExternalLink } from 'lucide-react';
+import { RefreshCw, MapPin, Waves, Search, Filter, ExternalLink, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlooding } from '@/contexts/flooding-context';
 import type { SocrataSensorMetadata } from '@/lib/nyc-opendata';
@@ -79,6 +79,10 @@ export function FloodMap({ className }: { className?: string }) {
     // FEMA flood zone layer toggle
     const [showFemaZones, setShowFemaZones] = useState(false);
     const [femaLoading, setFemaLoading] = useState(false);
+
+    // Council Districts layer toggle
+    const [showCouncilDistricts, setShowCouncilDistricts] = useState(false);
+    const [councilLoading, setCouncilLoading] = useState(false);
 
     // NYC center coordinates
     const NYC_CENTER: [number, number] = [-73.935242, 40.730610];
@@ -404,6 +408,71 @@ export function FloodMap({ className }: { className?: string }) {
             .finally(() => setFemaLoading(false));
     }, [showFemaZones, mapLoaded]);
 
+    // Council Districts layer — add/remove based on toggle. Mirrors the FEMA pattern (load on first toggle-on, leave the source in place across off/on cycles within a session, so reopening doesn't refetch).
+    useEffect(() => {
+        if (!map.current || !mapLoaded) return;
+
+        const COUNCIL_SOURCE = 'council-districts';
+        const COUNCIL_FILL = 'council-districts-fill';
+        const COUNCIL_OUTLINE = 'council-districts-outline';
+
+        const removeCouncilLayers = () => {
+            if (map.current!.getLayer(COUNCIL_OUTLINE)) map.current!.removeLayer(COUNCIL_OUTLINE);
+            if (map.current!.getLayer(COUNCIL_FILL)) map.current!.removeLayer(COUNCIL_FILL);
+            if (map.current!.getSource(COUNCIL_SOURCE)) map.current!.removeSource(COUNCIL_SOURCE);
+        };
+
+        if (!showCouncilDistricts) {
+            removeCouncilLayers();
+            return;
+        }
+
+        if (map.current.getSource(COUNCIL_SOURCE)) return;
+
+        setCouncilLoading(true);
+        fetch('/api/council-districts')
+            .then(r => r.json())
+            .then(geojson => {
+                if (!map.current || map.current.getSource(COUNCIL_SOURCE)) return;
+                map.current.addSource(COUNCIL_SOURCE, { type: 'geojson', data: geojson });
+
+                // Amber palette so it doesn't collide with FEMA's red/blue/purple when both are on.
+                // Fill is faint (0.10) — districts are administrative context, not the focus; outline carries the visual weight.
+                // Both fill and outline get a subtle zoom interpolation so the layer reads at every zoom without being heavy at city-wide view.
+                map.current.addLayer({
+                    id: COUNCIL_FILL,
+                    type: 'fill',
+                    source: COUNCIL_SOURCE,
+                    paint: {
+                        'fill-color': 'rgba(245,158,11,1)', // amber-500
+                        'fill-opacity': [
+                            'interpolate', ['linear'], ['zoom'],
+                            9, 0.05,
+                            12, 0.10,
+                            15, 0.15,
+                        ],
+                    },
+                }, 'waterway-label');
+
+                map.current.addLayer({
+                    id: COUNCIL_OUTLINE,
+                    type: 'line',
+                    source: COUNCIL_SOURCE,
+                    paint: {
+                        'line-color': 'rgba(245,158,11,0.85)',
+                        'line-width': [
+                            'interpolate', ['linear'], ['zoom'],
+                            9, 0.8,
+                            12, 1.5,
+                            15, 2.0,
+                        ],
+                    },
+                }, 'waterway-label');
+            })
+            .catch(err => console.error('Council Districts layer error:', err))
+            .finally(() => setCouncilLoading(false));
+    }, [showCouncilDistricts, mapLoaded]);
+
     const activeCount = sensors.filter(s => s.sensor_status === 'good').length;
     const offlineCount = sensors.filter(s => ['dead', 'retired'].includes(s.sensor_status)).length;
 
@@ -523,6 +592,26 @@ export function FloodMap({ className }: { className?: string }) {
                         <Waves className="w-3 h-3" />
                     )}
                     FEMA Zones
+                </button>
+
+                {/* Council Districts Toggle */}
+                <button
+                    onClick={() => setShowCouncilDistricts(!showCouncilDistricts)}
+                    disabled={councilLoading}
+                    className={cn(
+                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
+                        showCouncilDistricts
+                            ? "bg-amber-500/30 border border-amber-400 text-amber-300"
+                            : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
+                    )}
+                    title="Toggle NYC City Council District overlay"
+                >
+                    {councilLoading ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                        <Building2 className="w-3 h-3" />
+                    )}
+                    Council Districts
                 </button>
 
                 {/* FloodNet Full Dashboard Link */}
