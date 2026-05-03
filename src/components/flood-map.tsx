@@ -3,18 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { RefreshCw, MapPin, Waves, Search, Filter, ExternalLink, Building2 } from 'lucide-react';
+import { RefreshCw, MapPin, Waves, Search, ExternalLink, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlooding } from '@/contexts/flooding-context';
 import type { SocrataSensorMetadata } from '@/lib/nyc-opendata';
 
-// Infer borough from sensor name prefix (e.g. "BK - ..." → "Brooklyn")
 const BOROUGH_PREFIX_MAP: Record<string, string> = {
-    'bk': 'Brooklyn',
-    'q': 'Queens',
-    'm': 'Manhattan',
-    'bx': 'Bronx',
-    'si': 'Staten Island',
+    'bk': 'Brooklyn', 'q': 'Queens', 'm': 'Manhattan', 'bx': 'Bronx', 'si': 'Staten Island',
 };
 
 function inferBorough(sensorName: string): string | undefined {
@@ -22,158 +17,97 @@ function inferBorough(sensorName: string): string | undefined {
     return prefix ? BOROUGH_PREFIX_MAP[prefix] : undefined;
 }
 
-// Set the Mapbox access token (validated below before use)
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
-const TOKEN_VALID = MAPBOX_TOKEN.startsWith('pk.');
+const TOKEN_VALID  = MAPBOX_TOKEN.startsWith('pk.');
+
+// Brand colors
+const C_TEAL    = '#1A6B7C';
+const C_AMBER   = '#E8A030';
+const C_AMBER_M = 'rgba(232,160,48,.55)'; // muted amber for warning
+const C_SLATE_M = 'rgba(61,79,88,.35)';   // muted slate for offline
 
 interface Sensor {
     deployment_id: string;
     name: string;
     sensor_status: string;
-    location: {
-        coordinates: [number, number]; // [lng, lat]
-    };
+    location: { coordinates: [number, number] };
 }
 
-interface FloodingSensor {
-    id: string;
-    name: string;
-    depth_mm: number;
-    depth_in: number;
-}
-
-interface FloodingData {
-    floodingCount: number;
-    activeSensors: number;
-    floodingSensors: FloodingSensor[];
-}
+interface FloodingSensor { id: string; name: string; depth_mm: number; depth_in: number }
 
 export function FloodMap({ className }: { className?: string }) {
-    const mapContainer = useRef<HTMLDivElement>(null);
-    const map = useRef<mapboxgl.Map | null>(null);
-    const markersRef = useRef<mapboxgl.Marker[]>([]);
+    const mapContainer  = useRef<HTMLDivElement>(null);
+    const map           = useRef<mapboxgl.Map | null>(null);
+    const markersRef    = useRef<mapboxgl.Marker[]>([]);
 
-    const [sensors, setSensors] = useState<Sensor[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [mapLoaded, setMapLoaded] = useState(false);
+    const [sensors, setSensors]             = useState<Sensor[]>([]);
+    const [isLoading, setIsLoading]         = useState(true);
+    const [mapLoaded, setMapLoaded]         = useState(false);
 
-    // Use shared flooding context
-    const flooding = useFlooding();
-    const floodingData = {
-        floodingCount: flooding.floodingCount,
-        activeSensors: flooding.activeSensors,
-        floodingSensors: flooding.floodingSensors
-    };
+    const flooding     = useFlooding();
+    const floodingData = { floodingCount: flooding.floodingCount, activeSensors: flooding.activeSensors, floodingSensors: flooding.floodingSensors };
 
-    // Sensor metadata from NYC Open Data
-    const [sensorMetadata, setSensorMetadata] = useState<Record<string, SocrataSensorMetadata>>({});
-    const [boroughFilter, setBoroughFilter] = useState('');
-    const [boroughs, setBoroughs] = useState<string[]>([]);
+    const [sensorMetadata, setSensorMetadata]       = useState<Record<string, SocrataSensorMetadata>>({});
+    const [boroughFilter, setBoroughFilter]         = useState('');
+    const [boroughs, setBoroughs]                   = useState<string[]>([]);
+    const [searchQuery, setSearchQuery]             = useState('');
+    const [showFloodingOnly, setShowFloodingOnly]   = useState(false);
+    const [showActiveOnly, setShowActiveOnly]       = useState(true);
+    const hasFlyToFlooding                          = useRef(false);
 
-    // Search and filter state
-    const [searchQuery, setSearchQuery] = useState('');
-    const [showFloodingOnly, setShowFloodingOnly] = useState(false);
-    const [showActiveOnly, setShowActiveOnly] = useState(true); // Default to active only
-    const hasFlyToFlooding = useRef(false);
+    const [showFemaZones, setShowFemaZones]                 = useState(false);
+    const [femaLoading, setFemaLoading]                     = useState(false);
+    const [showCouncilDistricts, setShowCouncilDistricts]   = useState(false);
+    const [councilLoading, setCouncilLoading]               = useState(false);
 
-    // FEMA flood zone layer toggle
-    const [showFemaZones, setShowFemaZones] = useState(false);
-    const [femaLoading, setFemaLoading] = useState(false);
-
-    // Council Districts layer toggle
-    const [showCouncilDistricts, setShowCouncilDistricts] = useState(false);
-    const [councilLoading, setCouncilLoading] = useState(false);
-    // True when polygons rendered but flood-count fetch failed — drives D10 notice.
     const [councilCountsUnavailable, setCouncilCountsUnavailable] = useState(false);
 
-    // NYC center coordinates
     const NYC_CENTER: [number, number] = [-73.935242, 40.730610];
     const NYC_ZOOM = 10;
 
-    // Fetch sensor data (fast)
     const fetchSensors = async () => {
         try {
             const res = await fetch('/api/floodnet/sensors');
-            if (res.ok) {
-                const data = await res.json();
-                setSensors(data.deployments || []);
-            }
-        } catch (e) {
-            console.error('Failed to fetch sensors:', e);
-        }
+            if (res.ok) { const d = await res.json(); setSensors(d.deployments || []); }
+        } catch (e) { console.error('Failed to fetch sensors:', e); }
     };
 
-    // Fetch data (sensors only - flooding comes from context)
     const fetchData = async () => {
         setIsLoading(true);
         await fetchSensors();
         setIsLoading(false);
     };
 
-    // Get marker color based on sensor status and flooding
     const getMarkerColor = (sensor: Sensor): string => {
-        // Check if sensor is offline
-        const offlineStatuses = ['dead', 'retired', 'signal'];
-        if (offlineStatuses.includes(sensor.sensor_status)) {
-            return '#64748b'; // Gray - offline
-        }
-
-        // Check if this sensor is flooding
-        const isFlooding = floodingData?.floodingSensors?.some(
-            f => f.id === sensor.deployment_id
-        );
-
-        if (isFlooding) {
-            return '#ef4444'; // Red - flooding
-        }
-
-        // Check if sensor has issues
-        const warningStatuses = ['low_charge', 'noisy', 'non-ota'];
-        if (warningStatuses.includes(sensor.sensor_status)) {
-            return '#f59e0b'; // Amber - warning
-        }
-
-        return '#22c55e'; // Green - good
+        if (['dead', 'retired', 'signal'].includes(sensor.sensor_status)) return C_SLATE_M;
+        const isFlooding = floodingData?.floodingSensors?.some(f => f.id === sensor.deployment_id);
+        if (isFlooding) return C_AMBER;
+        if (['low_charge', 'noisy', 'non-ota'].includes(sensor.sensor_status)) return C_AMBER_M;
+        return C_TEAL;
     };
 
     // Initialize map
     useEffect(() => {
         if (!mapContainer.current || map.current || !TOKEN_VALID) return;
-
         mapboxgl.accessToken = MAPBOX_TOKEN;
         map.current = new mapboxgl.Map({
             container: mapContainer.current,
-            style: 'mapbox://styles/mapbox/dark-v11',
+            style: 'mapbox://styles/mapbox/light-v11',
             center: NYC_CENTER,
             zoom: NYC_ZOOM,
-            attributionControl: false
+            attributionControl: false,
         });
-
-        map.current.addControl(
-            new mapboxgl.NavigationControl({ showCompass: false }),
-            'top-right'
-        );
-
-        map.current.on('load', () => {
-            setMapLoaded(true);
-        });
-
-        return () => {
-            map.current?.remove();
-            map.current = null;
-        };
+        map.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+        map.current.on('load', () => setMapLoaded(true));
+        return () => { map.current?.remove(); map.current = null; };
     }, []);
 
-    // Fetch data on mount
     useEffect(() => {
         fetchData();
-
-        // Auto-refresh every 5 minutes
         const interval = setInterval(fetchData, 5 * 60 * 1000);
         return () => clearInterval(interval);
     }, []);
 
-    // Fetch NYC Open Data sensor metadata (once — it rarely changes)
     useEffect(() => {
         (async () => {
             try {
@@ -183,235 +117,158 @@ export function FloodMap({ className }: { className?: string }) {
                 const lookup: Record<string, SocrataSensorMetadata> = {};
                 const boroughSet = new Set<string>();
                 for (const s of data) {
-                    // Normalize name for matching: trim and lowercase
                     const key = s.sensor_name?.trim().toLowerCase();
                     if (key) lookup[key] = s;
                     if (s.borough) boroughSet.add(s.borough);
                 }
                 setSensorMetadata(lookup);
-                // Ensure all 5 boroughs are available even if metadata is incomplete
                 Object.values(BOROUGH_PREFIX_MAP).forEach(b => boroughSet.add(b));
                 setBoroughs(Array.from(boroughSet).sort());
-            } catch (e) {
-                console.error('Failed to fetch sensor metadata:', e);
-            }
+            } catch (e) { console.error('Failed to fetch sensor metadata:', e); }
         })();
     }, []);
 
-    // Update markers when data or filters change
+    // Update markers
     useEffect(() => {
         if (!map.current || !mapLoaded || sensors.length === 0) return;
 
-        // Apply filters to sensors
         const offlineStatuses = ['dead', 'retired', 'signal'];
         const sensorsToShow = sensors.filter(sensor => {
-            const matchesSearch = searchQuery === '' ||
-                sensor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                sensor.deployment_id.toLowerCase().includes(searchQuery.toLowerCase());
-
-            const isFlooding = floodingData?.floodingSensors?.some(f => f.id === sensor.deployment_id);
-            const matchesFloodingFilter = !showFloodingOnly || isFlooding;
-
-            // Active filter — hide offline sensors
-            const isOffline = offlineStatuses.includes(sensor.sensor_status);
-            const matchesActive = !showActiveOnly || !isOffline;
-
-            // Borough filter via metadata lookup, fallback to name prefix
-            const meta = sensorMetadata[sensor.name?.trim().toLowerCase()];
-            const sensorBorough = meta?.borough || inferBorough(sensor.name);
-            const matchesBorough = !boroughFilter || sensorBorough === boroughFilter;
-
-            return matchesSearch && matchesFloodingFilter && matchesActive && matchesBorough;
+            const matchesSearch   = searchQuery === '' || sensor.name.toLowerCase().includes(searchQuery.toLowerCase()) || sensor.deployment_id.toLowerCase().includes(searchQuery.toLowerCase());
+            const isFlooding      = floodingData?.floodingSensors?.some(f => f.id === sensor.deployment_id);
+            const isOffline       = offlineStatuses.includes(sensor.sensor_status);
+            const meta            = sensorMetadata[sensor.name?.trim().toLowerCase()];
+            const sensorBorough   = meta?.borough || inferBorough(sensor.name);
+            return matchesSearch && (!showFloodingOnly || isFlooding) && (!showActiveOnly || !isOffline) && (!boroughFilter || sensorBorough === boroughFilter);
         });
 
-        // Clear existing markers
         markersRef.current.forEach(m => m.remove());
         markersRef.current = [];
 
-        // Add new markers for filtered sensors
         sensorsToShow.forEach(sensor => {
             if (!sensor.location?.coordinates) return;
-
             const [lng, lat] = sensor.location.coordinates;
-            const color = getMarkerColor(sensor);
+            const color        = getMarkerColor(sensor);
+            const floodingInfo = floodingData?.floodingSensors?.find(f => f.id === sensor.deployment_id);
+            const isFlooding   = !!floodingInfo;
 
-            // Check if flooding
-            const floodingInfo = floodingData?.floodingSensors?.find(
-                f => f.id === sensor.deployment_id
-            );
-
-            // Create custom marker element
             const el = document.createElement('div');
             el.className = 'flood-sensor-marker';
-            const baseBoxShadow = floodingInfo ? `0 0 10px ${color}` : `0 0 4px ${color}`;
+            const baseGlow = isFlooding ? `0 0 8px ${C_AMBER}` : `0 0 3px ${color}`;
             el.style.cssText = `
-                width: 12px;
-                height: 12px;
+                width: 11px; height: 11px;
                 background-color: ${color};
-                border: 2px solid rgba(255,255,255,0.8);
+                border: 2px solid rgba(255,255,255,0.9);
                 border-radius: 50%;
                 cursor: pointer;
                 transition: box-shadow 0.2s, border-width 0.2s;
-                box-shadow: ${baseBoxShadow};
+                box-shadow: ${baseGlow};
+                ${isFlooding ? 'animation: fv-pulse 1.5s infinite;' : ''}
             `;
 
-            // Add pulse animation for flooding sensors
-            if (floodingInfo) {
-                el.style.animation = 'pulse 1.5s infinite';
-            }
-
-            // Hover effect using glow instead of scale (prevents position jump)
             el.addEventListener('mouseenter', () => {
-                el.style.boxShadow = `0 0 15px ${color}, 0 0 25px ${color}`;
+                el.style.boxShadow = `0 0 12px ${color}, 0 0 20px ${color}`;
                 el.style.borderWidth = '3px';
             });
             el.addEventListener('mouseleave', () => {
-                el.style.boxShadow = baseBoxShadow;
+                el.style.boxShadow = baseGlow;
                 el.style.borderWidth = '2px';
             });
 
-            // Create popup content
-            const statusLabel = floodingInfo
-                ? `🔴 FLOODING: ${floodingInfo.depth_in}" depth`
-                : sensor.sensor_status === 'good'
-                    ? '🟢 Active - No flooding'
-                    : `⚪ ${sensor.sensor_status}`;
+            const meta       = sensorMetadata[sensor.name?.trim().toLowerCase()];
+            const statusText = isFlooding
+                ? `Flooding · ${floodingInfo!.depth_in}" depth`
+                : sensor.sensor_status === 'good' ? 'Active · No flooding'
+                : sensor.sensor_status;
+            const statusColor = isFlooding ? C_AMBER : sensor.sensor_status === 'good' ? C_TEAL : 'rgba(61,79,88,.45)';
 
-            // Enrich with NYC Open Data metadata
-            const meta = sensorMetadata[sensor.name?.trim().toLowerCase()];
             const metaLines: string[] = [];
-            if (meta?.borough) metaLines.push(`${meta.borough}${meta.zipcode ? ` · ${meta.zipcode}` : ''}`);
-            if (meta?.street_name) metaLines.push(meta.street_name);
-            if (meta?.tidally_influenced === 'true') metaLines.push('🌊 Tidally influenced');
+            if (meta?.borough)              metaLines.push(`${meta.borough}${meta.zipcode ? ` · ${meta.zipcode}` : ''}`);
+            if (meta?.street_name)          metaLines.push(meta.street_name);
+            if (meta?.tidally_influenced === 'true') metaLines.push('Tidally influenced');
 
-            const popup = new mapboxgl.Popup({
-                offset: 15,
-                closeButton: false,
-                className: 'flood-map-popup'
-            }).setHTML(`
-                <div style="font-family: system-ui; padding: 4px;">
-                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">
-                        ${sensor.name}
+            const popup = new mapboxgl.Popup({ offset: 15, closeButton: false, className: 'fv-map-popup' })
+                .setHTML(`
+                    <div style="font-family:var(--font-jakarta,system-ui);padding:2px;">
+                        <div style="font-weight:700;font-size:12px;color:#3D4F58;margin-bottom:3px;">${sensor.name}</div>
+                        <div style="font-size:10px;font-weight:600;color:${statusColor};">${statusText}</div>
+                        ${metaLines.length > 0 ? `
+                            <div style="font-size:9px;color:rgba(61,79,88,.45);margin-top:5px;padding-top:5px;border-top:1px solid rgba(61,79,88,.1);letter-spacing:.03em;">
+                                ${metaLines.join(' &nbsp;·&nbsp; ')}
+                            </div>
+                        ` : ''}
                     </div>
-                    <div style="font-size: 11px; color: #94a3b8;">
-                        ${statusLabel}
-                    </div>
-                    ${metaLines.length > 0 ? `
-                        <div style="font-size: 10px; color: #64748b; margin-top: 4px; border-top: 1px solid #334155; padding-top: 4px;">
-                            ${metaLines.join('<br/>')}
-                        </div>
-                    ` : ''}
-                </div>
-            `);
+                `);
 
-            // Click to zoom in and open popup
             el.addEventListener('click', () => {
-                map.current?.flyTo({
-                    center: [lng, lat],
-                    zoom: 15,
-                    duration: 1000
-                });
+                map.current?.flyTo({ center: [lng, lat], zoom: 15, duration: 1000 });
             });
 
             const marker = new mapboxgl.Marker({ element: el })
                 .setLngLat([lng, lat])
                 .setPopup(popup)
                 .addTo(map.current!);
-
             markersRef.current.push(marker);
         });
 
-        // Fly to first flooding sensor only once on initial load
-        if (!hasFlyToFlooding.current && floodingData?.floodingSensors && floodingData.floodingSensors.length > 0) {
-            const floodingSensor = sensors.find(
-                s => s.deployment_id === floodingData.floodingSensors[0].id
-            );
-            if (floodingSensor?.location?.coordinates) {
+        if (!hasFlyToFlooding.current && floodingData?.floodingSensors?.length > 0) {
+            const fs = sensors.find(s => s.deployment_id === floodingData.floodingSensors[0].id);
+            if (fs?.location?.coordinates) {
                 hasFlyToFlooding.current = true;
-                map.current.flyTo({
-                    center: floodingSensor.location.coordinates,
-                    zoom: 13,
-                    duration: 2000
-                });
+                map.current.flyTo({ center: fs.location.coordinates, zoom: 13, duration: 2000 });
             }
         }
     }, [sensors, floodingData, mapLoaded, searchQuery, showFloodingOnly, showActiveOnly, boroughFilter, sensorMetadata]);
 
-    // FEMA zone layer — add/remove based on toggle
+    // FEMA zones
     useEffect(() => {
         if (!map.current || !mapLoaded) return;
-
-        const FEMA_SOURCE = 'fema-zones';
-        const FEMA_FILL = 'fema-zones-fill';
-        const FEMA_OUTLINE = 'fema-zones-outline';
-
-        const removeFemaLayers = () => {
-            if (map.current!.getLayer(FEMA_OUTLINE)) map.current!.removeLayer(FEMA_OUTLINE);
-            if (map.current!.getLayer(FEMA_FILL)) map.current!.removeLayer(FEMA_FILL);
-            if (map.current!.getSource(FEMA_SOURCE)) map.current!.removeSource(FEMA_SOURCE);
+        const SRC = 'fema-zones', FILL = 'fema-zones-fill', LINE = 'fema-zones-outline';
+        const remove = () => {
+            if (map.current!.getLayer(LINE)) map.current!.removeLayer(LINE);
+            if (map.current!.getLayer(FILL)) map.current!.removeLayer(FILL);
+            if (map.current!.getSource(SRC))  map.current!.removeSource(SRC);
         };
-
-        if (!showFemaZones) {
-            removeFemaLayers();
-            return;
-        }
-
-        if (map.current.getSource(FEMA_SOURCE)) return;
-
+        if (!showFemaZones) { remove(); return; }
+        if (map.current.getSource(SRC)) return;
         setFemaLoading(true);
-        fetch('/api/fema/zones')
-            .then(r => r.json())
-            .then(geojson => {
-                if (!map.current || map.current.getSource(FEMA_SOURCE)) return;
-                map.current.addSource(FEMA_SOURCE, { type: 'geojson', data: geojson });
-
-                // Fill opacities tuned for the dark-v11 base map — translucent enough
-                // to read place names through, opaque enough to be obvious from across
-                // the room. Visual hierarchy matches risk hierarchy: VE (coastal high
-                // velocity) > AE (1% annual) > AO/AH (shallow) > A (approximate, mapped
-                // without depth detail). A uses cyan to stay distinct from AE's blue.
-                map.current.addLayer({
-                    id: FEMA_FILL,
-                    type: 'fill',
-                    source: FEMA_SOURCE,
-                    paint: {
-                        'fill-color': [
-                            'match', ['get', 'FLD_ZONE'],
-                            'VE', 'rgba(239,68,68,0.55)',
-                            'AE', 'rgba(59,130,246,0.40)',
-                            'AO', 'rgba(168,85,247,0.40)',
-                            'AH', 'rgba(168,85,247,0.40)',
-                            'A',  'rgba(34,211,238,0.30)',
-                            'rgba(0,0,0,0)'
-                        ],
-                        'fill-opacity': 1,
-                    },
-                }, 'waterway-label');
-
-                map.current.addLayer({
-                    id: FEMA_OUTLINE,
-                    type: 'line',
-                    source: FEMA_SOURCE,
-                    paint: {
-                        'line-color': [
-                            'match', ['get', 'FLD_ZONE'],
-                            'VE', 'rgba(239,68,68,0.85)',
-                            'AE', 'rgba(59,130,246,0.75)',
-                            'AO', 'rgba(168,85,247,0.75)',
-                            'AH', 'rgba(168,85,247,0.75)',
-                            'A',  'rgba(34,211,238,0.70)',
-                            'rgba(0,0,0,0)'
-                        ],
-                        'line-width': 1.5,
-                    },
-                }, 'waterway-label');
-            })
-            .catch(err => console.error('FEMA layer error:', err))
-            .finally(() => setFemaLoading(false));
+        fetch('/api/fema/zones').then(r => r.json()).then(geojson => {
+            if (!map.current || map.current.getSource(SRC)) return;
+            map.current.addSource(SRC, { type: 'geojson', data: geojson });
+            map.current.addLayer({
+                id: FILL, type: 'fill', source: SRC,
+                paint: {
+                    'fill-color': [
+                        'match', ['get', 'FLD_ZONE'],
+                        'VE', 'rgba(196,98,45,0.45)',
+                        'AE', 'rgba(26,107,124,0.30)',
+                        'AO', 'rgba(232,160,48,0.35)',
+                        'AH', 'rgba(232,160,48,0.35)',
+                        'A',  'rgba(61,79,88,0.15)',
+                        'rgba(0,0,0,0)'
+                    ],
+                    'fill-opacity': 1,
+                },
+            }, 'waterway-label');
+            map.current.addLayer({
+                id: LINE, type: 'line', source: SRC,
+                paint: {
+                    'line-color': [
+                        'match', ['get', 'FLD_ZONE'],
+                        'VE', 'rgba(196,98,45,0.85)',
+                        'AE', 'rgba(26,107,124,0.70)',
+                        'AO', 'rgba(232,160,48,0.75)',
+                        'AH', 'rgba(232,160,48,0.75)',
+                        'A',  'rgba(61,79,88,0.40)',
+                        'rgba(0,0,0,0)'
+                    ],
+                    'line-width': 1.5,
+                },
+            }, 'waterway-label');
+        }).catch(err => console.error('FEMA layer error:', err)).finally(() => setFemaLoading(false));
     }, [showFemaZones, mapLoaded]);
 
-    // Council Districts layer — add/remove based on toggle. Mirrors the FEMA pattern (load on first toggle-on, leave the source in place across off/on cycles within a session, so reopening doesn't refetch).
-    // Phase 2: also fetches per-district 30-day flood-event counts and merges them into the GeoJSON properties before adding the source. The fill is graded by relative count (lightest=lowest, darkest=highest), and a `symbol` layer renders "District N — count" labels above zoom 11.
+    // Council Districts layer — fetches polygons + 30-day flood counts in parallel. Counts can fail independently — districts still render, just without gradient.
     useEffect(() => {
         if (!map.current || !mapLoaded) return;
 
@@ -436,7 +293,6 @@ export function FloodMap({ className }: { className?: string }) {
         if (map.current.getSource(COUNCIL_SOURCE)) return;
 
         setCouncilLoading(true);
-        // Fetch polygons + counts in parallel. Counts can fail independently (D10) — districts still render, just without the gradient and with a "data unavailable" notice.
         Promise.all([
             fetch('/api/council-districts').then(r => r.json()),
             fetch('/api/council-districts/flood-counts').then(r => r.ok ? r.json() : Promise.reject(r.statusText)).catch(() => null),
@@ -451,8 +307,6 @@ export function FloodMap({ className }: { className?: string }) {
                 const countsAvailable = countsResp !== null && countsResp.counts !== undefined;
                 setCouncilCountsUnavailable(!countsAvailable);
 
-                // Merge per-district counts into feature properties so Mapbox can read them.
-                // Districts with no events get 0 (avoids a "missing" branch in expressions).
                 const enriched = {
                     ...geojson,
                     features: geojson.features.map((f: { properties?: { coundist?: string } }) => ({
@@ -466,77 +320,51 @@ export function FloodMap({ className }: { className?: string }) {
 
                 map.current.addSource(COUNCIL_SOURCE, { type: 'geojson', data: enriched });
 
-                // Compute relative gradient stops from the actual data. If counts are unavailable or all zero, fall back to a flat fill (no gradient signal to convey).
                 const allCounts: number[] = enriched.features.map((f: { properties: { flood_count: number } }) => f.properties.flood_count);
                 const maxCount = Math.max(...allCounts, 0);
                 const useGradient = countsAvailable && maxCount > 0;
 
-                // Amber palette — doesn't collide with FEMA's red/blue/purple. The gradient runs from a faint cream (low/no events) to a saturated amber-700 (highest events). Light at the bottom keeps districts with zero readable instead of disappearing.
                 const fillColor = useGradient
                     ? ([
                         'interpolate', ['linear'], ['get', 'flood_count'],
-                        0, 'rgba(254,243,199,1)',                // amber-100 (low)
-                        Math.max(maxCount * 0.5, 1), 'rgba(245,158,11,1)',  // amber-500 (mid)
-                        maxCount, 'rgba(146,64,14,1)',           // amber-800 (high)
+                        0, 'rgba(254,243,199,1)',
+                        Math.max(maxCount * 0.5, 1), 'rgba(245,158,11,1)',
+                        maxCount, 'rgba(146,64,14,1)',
                       ] as unknown as string)
-                    : 'rgba(245,158,11,1)'; // flat amber-500 when no data
+                    : 'rgba(245,158,11,1)';
 
                 map.current.addLayer({
-                    id: COUNCIL_FILL,
-                    type: 'fill',
-                    source: COUNCIL_SOURCE,
+                    id: COUNCIL_FILL, type: 'fill', source: COUNCIL_SOURCE,
                     paint: {
                         'fill-color': fillColor,
-                        // Slightly higher opacity at low zoom than Phase 1 — counts are the point of the layer now, gradient needs to read from far away.
-                        'fill-opacity': [
-                            'interpolate', ['linear'], ['zoom'],
-                            9, 0.20,
-                            12, 0.30,
-                            15, 0.35,
-                        ],
+                        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.20, 12, 0.30, 15, 0.35],
                     },
                 }, 'waterway-label');
 
                 map.current.addLayer({
-                    id: COUNCIL_OUTLINE,
-                    type: 'line',
-                    source: COUNCIL_SOURCE,
+                    id: COUNCIL_OUTLINE, type: 'line', source: COUNCIL_SOURCE,
                     paint: {
                         'line-color': 'rgba(245,158,11,0.85)',
-                        'line-width': [
-                            'interpolate', ['linear'], ['zoom'],
-                            9, 0.8,
-                            12, 1.5,
-                            15, 2.0,
-                        ],
+                        'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.8, 12, 1.5, 15, 2.0],
                     },
                 }, 'waterway-label');
 
-                // D6/D8: per-district label "District N — count", hidden below borough-level zoom to avoid 51 overlapping labels at city-wide view.
                 map.current.addLayer({
-                    id: COUNCIL_LABEL,
-                    type: 'symbol',
-                    source: COUNCIL_SOURCE,
+                    id: COUNCIL_LABEL, type: 'symbol', source: COUNCIL_SOURCE,
                     minzoom: 11,
                     layout: {
                         'text-field': countsAvailable
                             ? ['format',
-                                ['concat', 'District ', ['get', 'coundist']],
-                                { 'font-scale': 1.0 },
-                                '\n',
-                                {},
-                                ['to-string', ['get', 'flood_count']],
-                                { 'font-scale': 1.2, 'text-color': '#fef3c7' }, // amber-100 — count gets visual weight
+                                ['concat', 'District ', ['get', 'coundist']], { 'font-scale': 1.0 },
+                                '\n', {},
+                                ['to-string', ['get', 'flood_count']], { 'font-scale': 1.2, 'text-color': '#fef3c7' },
                               ]
                             : ['concat', 'District ', ['get', 'coundist']],
-                        'text-size': 11,
-                        'text-anchor': 'center',
-                        'text-justify': 'center',
-                        'text-allow-overlap': false,
-                        'text-ignore-placement': false,
+                        'text-size': 11, 'text-anchor': 'center', 'text-justify': 'center',
+                        'text-allow-overlap': false, 'text-ignore-placement': false,
                     },
                     paint: {
-                        'text-color': '#fbbf24', // amber-400
+                        'text-color': '#fbbf24',
                         'text-halo-color': 'rgba(0,0,0,0.85)',
                         'text-halo-width': 1.5,
                     },
@@ -546,307 +374,214 @@ export function FloodMap({ className }: { className?: string }) {
             .finally(() => setCouncilLoading(false));
     }, [showCouncilDistricts, mapLoaded]);
 
-    const activeCount = sensors.filter(s => s.sensor_status === 'good').length;
-    const offlineCount = sensors.filter(s => ['dead', 'retired'].includes(s.sensor_status)).length;
-
-    // Filter sensors for display count
     const offlineStatusList = ['dead', 'retired', 'signal'];
     const filteredSensors = sensors.filter(sensor => {
-        const matchesSearch = searchQuery === '' ||
-            sensor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            sensor.deployment_id.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch  = searchQuery === '' || sensor.name.toLowerCase().includes(searchQuery.toLowerCase()) || sensor.deployment_id.toLowerCase().includes(searchQuery.toLowerCase());
+        const isFlooding     = floodingData?.floodingSensors?.some(f => f.id === sensor.deployment_id);
+        const isOffline      = offlineStatusList.includes(sensor.sensor_status);
+        const meta           = sensorMetadata[sensor.name?.trim().toLowerCase()];
+        const sensorBorough  = meta?.borough || inferBorough(sensor.name);
+        return matchesSearch && (!showFloodingOnly || isFlooding) && (!showActiveOnly || !isOffline) && (!boroughFilter || sensorBorough === boroughFilter);
+    });
 
-        const isFlooding = floodingData?.floodingSensors?.some(f => f.id === sensor.deployment_id);
-        const matchesFloodingFilter = !showFloodingOnly || isFlooding;
-
-        const isOffline = offlineStatusList.includes(sensor.sensor_status);
-        const matchesActive = !showActiveOnly || !isOffline;
-
-        const meta = sensorMetadata[sensor.name?.trim().toLowerCase()];
-        const sensorBorough = meta?.borough || inferBorough(sensor.name);
-        const matchesBorough = !boroughFilter || sensorBorough === boroughFilter;
-
-        return matchesSearch && matchesFloodingFilter && matchesActive && matchesBorough;
+    // Shared button style helper
+    const filterBtn = (active: boolean, activeColor: string): React.CSSProperties => ({
+        display: 'flex', alignItems: 'center', gap: '5px',
+        padding: '4px 10px', borderRadius: '6px', border: '1px solid',
+        fontFamily: 'var(--font-jakarta)', fontSize: '11px', fontWeight: 600,
+        cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap' as const,
+        ...(active
+            ? { background: `${activeColor}18`, borderColor: `${activeColor}55`, color: activeColor }
+            : { background: 'rgba(61,79,88,.04)', borderColor: 'rgba(61,79,88,.12)', color: 'rgba(61,79,88,.5)' }
+        ),
     });
 
     return (
-        <div className={cn("glass-panel rounded-xl overflow-hidden flex flex-col", className)}>
-            {/* Header with Search and Filter */}
-            <div className="p-3 border-b border-white/5 flex flex-wrap items-center gap-3">
-                {/* Title */}
-                <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-blue-500/10">
-                        <MapPin className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-white text-sm">Flood Sensor Network</h3>
-                        <p className="text-[10px] text-slate-400">
-                            {filteredSensors.length} of {sensors.length} sensors
-                        </p>
-                    </div>
-                </div>
+        <div className={cn("overflow-hidden flex flex-col", className)} style={{ background: '#fff', borderRadius: '0 0 12px 12px' }}>
+            {/* Filter bar */}
+            <div style={{ padding: '.625rem 1rem', borderBottom: '1px solid rgba(61,79,88,.07)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '.5rem' }}>
 
-                {/* Search Input */}
-                <div className="relative flex-1 min-w-[120px] max-w-[180px]">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                {/* Sensor count */}
+                <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.4)', letterSpacing: '.06em', marginRight: '.25rem' }}>
+                    {filteredSensors.length}/{sensors.length} SENSORS
+                </span>
+
+                {/* Search */}
+                <div style={{ position: 'relative', minWidth: '120px', maxWidth: '160px' }}>
+                    <Search size={11} style={{ position: 'absolute', left: '7px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(61,79,88,.35)', pointerEvents: 'none' }} />
                     <input
                         type="text"
-                        placeholder="Search..."
+                        placeholder="Search…"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-7 pr-2 py-1 text-xs bg-slate-800/50 border border-white/10 rounded text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
+                        onChange={e => setSearchQuery(e.target.value)}
+                        style={{
+                            width: '100%', paddingLeft: '22px', paddingRight: '8px', paddingTop: '4px', paddingBottom: '4px',
+                            fontFamily: 'var(--font-noto)', fontSize: '11px', color: '#3D4F58',
+                            background: 'rgba(61,79,88,.05)', border: '1px solid rgba(61,79,88,.1)',
+                            borderRadius: '6px', outline: 'none', boxSizing: 'border-box' as const,
+                        }}
                     />
                 </div>
 
-                {/* Borough Filter */}
+                {/* Borough */}
                 {boroughs.length > 0 && (
                     <select
                         value={boroughFilter}
-                        onChange={(e) => setBoroughFilter(e.target.value)}
-                        className="text-xs bg-slate-800/50 border border-white/10 rounded px-2 py-1 text-slate-300 focus:outline-none focus:border-blue-500/50"
+                        onChange={e => setBoroughFilter(e.target.value)}
+                        style={{
+                            fontFamily: 'var(--font-plex-mono)', fontSize: '10px', color: '#3D4F58',
+                            background: 'rgba(61,79,88,.05)', border: '1px solid rgba(61,79,88,.1)',
+                            borderRadius: '6px', padding: '4px 8px', outline: 'none', cursor: 'pointer',
+                        }}
                     >
                         <option value="">All Boroughs</option>
-                        {boroughs.map(b => (
-                            <option key={b} value={b}>{b}</option>
-                        ))}
+                        {boroughs.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                 )}
 
-                {/* Active Only Toggle */}
-                <button
-                    onClick={() => setShowActiveOnly(!showActiveOnly)}
-                    className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
-                        showActiveOnly
-                            ? "bg-green-500/20 border border-green-500/50 text-green-400"
-                            : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
-                    )}
-                >
-                    <MapPin className="w-3 h-3" />
+                {/* Active toggle */}
+                <button onClick={() => setShowActiveOnly(!showActiveOnly)} style={filterBtn(showActiveOnly, C_TEAL)}>
+                    <MapPin size={10} />
                     Active
                 </button>
 
-                {/* Flooding Toggle with integrated count */}
-                <button
-                    onClick={() => setShowFloodingOnly(!showFloodingOnly)}
-                    className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
-                        showFloodingOnly
-                            ? "bg-red-500 border border-red-500 text-white"
-                            : floodingData && floodingData.floodingCount > 0
-                                ? "bg-red-500/20 border border-red-500/50 text-red-400"
-                                : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
-                    )}
-                >
-                    <Waves className="w-3 h-3" />
+                {/* Flooding toggle */}
+                <button onClick={() => setShowFloodingOnly(!showFloodingOnly)} style={filterBtn(showFloodingOnly, C_AMBER)}>
+                    <Waves size={10} />
                     Flooding
-                    {floodingData && floodingData.floodingCount > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] leading-none">
+                    {floodingData?.floodingCount > 0 && (
+                        <span style={{ marginLeft: '2px', padding: '1px 5px', background: C_AMBER, color: '#fff', borderRadius: '10px', fontFamily: 'var(--font-plex-mono)', fontSize: '9px', lineHeight: '1.6' }}>
                             {floodingData.floodingCount}
                         </span>
                     )}
                 </button>
 
-                {/* FEMA Zones Toggle */}
-                <button
-                    onClick={() => setShowFemaZones(!showFemaZones)}
-                    disabled={femaLoading}
-                    className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
-                        showFemaZones
-                            ? "bg-blue-500/30 border border-blue-400 text-blue-300"
-                            : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
-                    )}
-                    title="Toggle FEMA flood zone overlay"
-                >
-                    {femaLoading ? (
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : (
-                        <Waves className="w-3 h-3" />
-                    )}
+                {/* FEMA zones */}
+                <button onClick={() => setShowFemaZones(!showFemaZones)} disabled={femaLoading} style={filterBtn(showFemaZones, C_TEAL)}>
+                    {femaLoading ? <RefreshCw size={10} className="animate-spin" /> : <Waves size={10} />}
                     FEMA Zones
                 </button>
 
-                {/* Council Districts Toggle */}
-                <button
-                    onClick={() => setShowCouncilDistricts(!showCouncilDistricts)}
-                    disabled={councilLoading}
-                    className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all",
-                        showCouncilDistricts
-                            ? "bg-amber-500/30 border border-amber-400 text-amber-300"
-                            : "bg-slate-800/50 border border-white/10 text-slate-400 hover:border-white/20"
-                    )}
-                    title="Toggle NYC City Council District overlay"
-                >
-                    {councilLoading ? (
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : (
-                        <Building2 className="w-3 h-3" />
-                    )}
+                {/* Council Districts */}
+                <button onClick={() => setShowCouncilDistricts(!showCouncilDistricts)} disabled={councilLoading} style={filterBtn(showCouncilDistricts, C_AMBER)}>
+                    {councilLoading ? <RefreshCw size={10} className="animate-spin" /> : <Building2 size={10} />}
                     Council Districts
                 </button>
 
-                {/* D10: notice when polygons rendered but flood-count fetch failed */}
                 {showCouncilDistricts && councilCountsUnavailable && (
-                    <span className="text-[10px] text-amber-300/80 italic px-1" title="Could not load 30-day flood event counts; districts shown without color grading or counts.">
+                    <span className="text-[10px] text-amber-300/80 italic px-1" title="Could not load 30-day flood event counts; districts shown without color grading.">
                         flood event data unavailable
                     </span>
                 )}
-
-                {/* FloodNet Full Dashboard Link */}
                 <a
                     href="https://dataviz.floodnet.nyc"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 hover:border-blue-400/50 rounded transition-all bg-blue-500/5 hover:bg-blue-500/10"
-                    title="Open full FloodNet dashboard"
+                    style={{ ...filterBtn(false, C_TEAL), textDecoration: 'none', color: 'rgba(61,79,88,.5)' }}
                 >
-                    <ExternalLink className="w-3 h-3" />
-                    Full Dashboard
+                    <ExternalLink size={10} />
+                    FloodNet
                 </a>
 
-                {/* Refresh Button */}
+                {/* Refresh */}
                 <button
                     onClick={fetchData}
                     disabled={isLoading}
-                    className="p-1.5 hover:bg-white/5 rounded transition-colors ml-auto"
-                    title="Refresh data"
+                    style={{ marginLeft: 'auto', padding: '5px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(61,79,88,.4)', borderRadius: '6px' }}
+                    title="Refresh"
                 >
-                    <RefreshCw className={cn(
-                        "w-3.5 h-3.5 text-slate-400",
-                        isLoading && "animate-spin"
-                    )} />
+                    <RefreshCw size={13} className={cn(isLoading && 'animate-spin')} />
                 </button>
             </div>
 
-            {/* Map Container */}
+            {/* Map */}
             <div className="relative flex-1 min-h-[350px]">
-                <div
-                    ref={mapContainer}
-                    className="absolute inset-0"
-                    style={{ width: '100%', height: '100%' }}
-                />
+                <div ref={mapContainer} className="absolute inset-0" style={{ width: '100%', height: '100%' }} />
 
-                {/* No token overlay */}
+                {/* No token */}
                 {!TOKEN_VALID && (
-                    <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-10 gap-3 text-center px-6">
-                        <MapPin className="w-8 h-8 text-slate-500" />
-                        <p className="text-sm font-medium text-slate-300">Map unavailable</p>
-                        <p className="text-xs text-slate-500 max-w-xs">
-                            Add your Mapbox token to <code className="text-blue-400">.env.local</code> as{' '}
-                            <code className="text-blue-400">NEXT_PUBLIC_MAPBOX_TOKEN</code>. Free tokens at{' '}
-                            <a href="https://account.mapbox.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">mapbox.com</a>.
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(247,244,239,.95)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10, gap: '.75rem', textAlign: 'center', padding: '1.5rem' }}>
+                        <MapPin size={28} style={{ color: 'rgba(61,79,88,.25)' }} />
+                        <p style={{ fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 700, color: '#3D4F58' }}>Map unavailable</p>
+                        <p style={{ fontFamily: 'var(--font-noto)', fontSize: '12px', color: 'rgba(61,79,88,.5)', maxWidth: '280px', lineHeight: 1.6 }}>
+                            Add your Mapbox token to <code style={{ color: C_TEAL }}>.env.local</code> as <code style={{ color: C_TEAL }}>NEXT_PUBLIC_MAPBOX_TOKEN</code>.
                         </p>
                     </div>
                 )}
 
-                {/* Loading overlay */}
+                {/* Loading */}
                 {TOKEN_VALID && isLoading && !mapLoaded && (
-                    <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center z-10">
-                        <span className="text-sm text-blue-400">Loading map...</span>
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(247,244,239,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', color: C_TEAL, letterSpacing: '.08em' }}>LOADING MAP…</span>
                     </div>
                 )}
 
                 {/* Legend */}
-                <div className="absolute bottom-4 left-4 glass-panel p-3 rounded-lg text-xs space-y-1.5 z-10">
-                    <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mb-2">Sensors</div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-green-500 border border-white/50" />
-                        <span className="text-slate-300">Active</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-amber-500 border border-white/50" />
-                        <span className="text-slate-300">Warning</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500 border border-white/50 shadow-[0_0_8px_#ef4444]" />
-                        <span className="text-slate-300">Flooding</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-slate-500 border border-white/50" />
-                        <span className="text-slate-300">Offline</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-sky-500/30 border-2 border-sky-400" />
-                        <span className="text-slate-300">Tidal</span>
-                    </div>
+                <div style={{
+                    position: 'absolute', bottom: '1rem', left: '1rem', zIndex: 10,
+                    background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(8px)',
+                    borderRadius: '10px', padding: '.75rem', border: '1px solid rgba(61,79,88,.08)',
+                    boxShadow: '0 2px 8px rgba(61,79,88,.1)',
+                }}>
+                    <div style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '8px', letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(61,79,88,.4)', marginBottom: '.5rem' }}>Sensors</div>
+                    {[
+                        { color: C_TEAL,    label: 'Active' },
+                        { color: C_AMBER_M, label: 'Warning' },
+                        { color: C_AMBER,   label: 'Flooding', glow: true },
+                        { color: C_SLATE_M, label: 'Offline' },
+                    ].map(({ color, label, glow }) => (
+                        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginBottom: '.3rem' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, border: '1.5px solid rgba(255,255,255,.9)', boxShadow: glow ? `0 0 6px ${C_AMBER}` : 'none', flexShrink: 0 }} />
+                            <span style={{ fontFamily: 'var(--font-noto)', fontSize: '10px', color: '#3D4F58' }}>{label}</span>
+                        </div>
+                    ))}
+
                     {showFemaZones && (
                         <>
-                            <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-3 mb-1">FEMA Zones</div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-red-500/60 border border-red-400/80" />
-                                <span className="text-slate-300">VE — Coastal high velocity</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-blue-500/50 border border-blue-400/75" />
-                                <span className="text-slate-300">AE — 1% annual chance</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-purple-500/50 border border-purple-400/75" />
-                                <span className="text-slate-300">AO / AH — Shallow flooding</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-cyan-500/40 border border-cyan-400/70" />
-                                <span className="text-slate-300">A — Approximate</span>
-                            </div>
+                            <div style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '8px', letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(61,79,88,.4)', margin: '.5rem 0 .3rem' }}>FEMA Zones</div>
+                            {[
+                                { color: 'rgba(196,98,45,.7)',  border: 'rgba(196,98,45,.9)',  label: 'VE — Coastal high vel.' },
+                                { color: 'rgba(26,107,124,.5)', border: 'rgba(26,107,124,.8)', label: 'AE — 1% annual' },
+                                { color: 'rgba(232,160,48,.5)', border: 'rgba(232,160,48,.8)', label: 'AO / AH — Shallow' },
+                                { color: 'rgba(61,79,88,.25)',  border: 'rgba(61,79,88,.5)',   label: 'A — Approximate' },
+                            ].map(({ color, border, label }) => (
+                                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginBottom: '.3rem' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: color, border: `1px solid ${border}`, flexShrink: 0 }} />
+                                    <span style={{ fontFamily: 'var(--font-noto)', fontSize: '10px', color: '#3D4F58' }}>{label}</span>
+                                </div>
+                            ))}
                         </>
                     )}
                 </div>
             </div>
 
-            {/* CSS for pulse animation and Mapbox */}
             <style jsx global>{`
-                /* Essential Mapbox GL styles */
-                .mapboxgl-map {
-                    position: absolute;
-                    top: 0;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
-                }
-                .mapboxgl-canvas {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                }
-                .mapboxgl-canvas-container {
-                    position: absolute;
-                    top: 0;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
-                    overflow: hidden;
-                }
+                .mapboxgl-map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+                .mapboxgl-canvas { position: absolute; left: 0; top: 0; }
+                .mapboxgl-canvas-container { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow: hidden; }
+
                 .mapboxgl-ctrl-group {
-                    background: #1e293b;
+                    background: #fff;
                     border-radius: 8px;
+                    box-shadow: 0 1px 4px rgba(61,79,88,.15);
+                    border: 1px solid rgba(61,79,88,.1);
                 }
-                .mapboxgl-ctrl-group button {
-                    background-color: #1e293b;
-                    border: none;
+                .mapboxgl-ctrl-group button { background: #fff; border: none; }
+                .mapboxgl-ctrl-group button:hover { background: rgba(61,79,88,.05); }
+
+                @keyframes fv-pulse {
+                    0%, 100% { box-shadow: 0 0 6px ${C_AMBER}; }
+                    50%       { box-shadow: 0 0 14px ${C_AMBER}, 0 0 22px rgba(232,160,48,.4); }
                 }
-                .mapboxgl-ctrl-group button:hover {
-                    background-color: #334155;
-                }
-                .mapboxgl-ctrl-group button span {
-                    filter: invert(1);
-                }
-                
-                @keyframes pulse {
-                    0%, 100% { box-shadow: 0 0 10px #ef4444; }
-                    50% { box-shadow: 0 0 20px #ef4444, 0 0 30px #ef4444; }
-                }
-                .flood-map-popup .mapboxgl-popup-content {
-                    background: #1e293b;
-                    border: 1px solid rgba(255,255,255,0.1);
+
+                .fv-map-popup .mapboxgl-popup-content {
+                    background: #fff;
+                    border: 1px solid rgba(61,79,88,.12);
                     border-radius: 8px;
                     padding: 8px 12px;
-                    color: white;
+                    box-shadow: 0 2px 8px rgba(61,79,88,.12);
                 }
-                .flood-map-popup .mapboxgl-popup-tip {
-                    border-top-color: #1e293b;
-                }
+                .fv-map-popup .mapboxgl-popup-tip { border-top-color: #fff; }
             `}</style>
         </div>
     );

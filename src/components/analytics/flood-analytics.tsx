@@ -1,54 +1,25 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
-import { MapPin, Flame, Waves, ArrowUp, ArrowDown, Clock, Droplets, BarChart3 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { MapPin, Flame, Waves, ArrowUp, ArrowDown, Clock, Droplets } from 'lucide-react';
 
-type BoroughData = {
-    borough: string;
-    events: number;
-    avgDepth: number;
-    avgDuration: number;
-};
-
-type HotspotData = {
-    sensorId: string;
-    name: string;
-    borough: string;
-    events: number;
-    maxDepth: number;
-    avgDuration: number;
-};
-
-type TidalData = {
-    tidal: { events: number; avgDepth: number; avgDuration: number; avgOnset: number; avgDrain: number };
-    nonTidal: { events: number; avgDepth: number; avgDuration: number; avgOnset: number; avgDrain: number };
-    sensorCount: { tidal: number; nonTidal: number };
-};
-
+type BoroughData  = { borough: string; events: number; avgDepth: number; avgDuration: number };
+type HotspotData  = { sensorId: string; name: string; borough: string; events: number; maxDepth: number; avgDuration: number };
+type TidalSide    = { events: number; avgDepth: number; avgDuration: number; avgOnset: number; avgDrain: number };
+type TidalData    = { tidal: TidalSide; nonTidal: TidalSide; sensorCount: { tidal: number; nonTidal: number } };
 type AnalyticsData = {
-    totalEvents: number;
-    totalSensors: number;
+    totalEvents: number; totalSensors: number;
     boroughFrequency: BoroughData[];
     hotspots: HotspotData[];
     tidalComparison: TidalData;
 };
 
-const BOROUGH_COLORS: Record<string, string> = {
-    'Brooklyn': 'bg-blue-500',
-    'Queens': 'bg-purple-500',
-    'Manhattan': 'bg-amber-500',
-    'Bronx': 'bg-emerald-500',
-    'Staten Island': 'bg-rose-500',
-};
-
-const BOROUGH_TEXT_COLORS: Record<string, string> = {
-    'Brooklyn': 'text-blue-400',
-    'Queens': 'text-purple-400',
-    'Manhattan': 'text-amber-400',
-    'Bronx': 'text-emerald-400',
-    'Staten Island': 'text-rose-400',
+const BOROUGH_COLOR: Record<string, string> = {
+    'Brooklyn':      '#1A6B7C',
+    'Queens':        '#E8A030',
+    'Manhattan':     '#C4622D',
+    'Bronx':         '#2A8FA4',
+    'Staten Island': '#3D4F58',
 };
 
 function formatDuration(mins: number): string {
@@ -58,6 +29,18 @@ function formatDuration(mins: number): string {
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+const rankColor  = (i: number) => i === 0 ? '#C4622D' : i === 1 ? '#E8A030' : i === 2 ? 'rgba(232,160,48,.6)' : 'rgba(61,79,88,.4)';
+const eventColor = (n: number) => n >= 10 ? '#C4622D' : n >= 5 ? '#E8A030' : 'rgba(61,79,88,.45)';
+
+const CARD: React.CSSProperties = {
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '1.25rem',
+    boxShadow: '0 1px 3px rgba(61,79,88,.06), 0 4px 12px rgba(61,79,88,.06)',
+};
+const TITLE: React.CSSProperties = { fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 700, color: '#3D4F58' };
+const META:  React.CSSProperties = { fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.35)', letterSpacing: '.05em' };
+
 export function FloodAnalytics() {
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -65,11 +48,10 @@ export function FloodAnalytics() {
     const fetchData = useCallback(async () => {
         try {
             const res = await fetch('/api/floodnet/opendata/analytics');
-            if (!res.ok) throw new Error('Failed to fetch');
-            const json = await res.json();
-            setData(json);
+            if (!res.ok) throw new Error('Failed');
+            setData(await res.json());
         } catch (err) {
-            console.error('FloodAnalytics fetch error:', err);
+            console.error('FloodAnalytics:', err);
         } finally {
             setIsLoading(false);
         }
@@ -77,24 +59,20 @@ export function FloodAnalytics() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 300000);
-        return () => clearInterval(interval);
+        const id = setInterval(fetchData, 300000);
+        return () => clearInterval(id);
     }, [fetchData]);
 
     if (isLoading) {
         return (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem' }}>
                 {[0, 1, 2].map(i => (
-                    <Card key={i} className="bg-slate-900/80 border-slate-800 p-4">
-                        <div className="animate-pulse">
-                            <div className="h-4 bg-slate-700 rounded w-1/2 mb-4"></div>
-                            <div className="space-y-2">
-                                <div className="h-6 bg-slate-800 rounded"></div>
-                                <div className="h-6 bg-slate-800 rounded"></div>
-                                <div className="h-6 bg-slate-800 rounded"></div>
-                            </div>
-                        </div>
-                    </Card>
+                    <div key={i} style={CARD}>
+                        <div style={{ height: '8px', background: 'rgba(61,79,88,.08)', borderRadius: '4px', marginBottom: '1rem', width: '60%' }} />
+                        {[1, 2, 3].map(j => (
+                            <div key={j} style={{ height: '20px', background: 'rgba(61,79,88,.05)', borderRadius: '4px', marginBottom: '.5rem' }} />
+                        ))}
+                    </div>
                 ))}
             </div>
         );
@@ -103,219 +81,143 @@ export function FloodAnalytics() {
     if (!data) return null;
 
     const maxBoroughEvents = Math.max(...data.boroughFrequency.map(b => b.events), 1);
-    const maxHotspotEvents = Math.max(...data.hotspots.map(h => h.events), 1);
+    const tidalTotal = data.tidalComparison.tidal.events + data.tidalComparison.nonTidal.events;
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem' }}>
+
             {/* Borough Flood Frequency */}
-            <Card className="bg-slate-900/80 border-slate-800 p-4">
-                <div className="flex items-center gap-2 mb-4">
-                    <MapPin className="w-4 h-4 text-sky-400" />
-                    <h4 className="text-sm font-semibold text-white">Borough Flood Frequency</h4>
+            <div style={CARD}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '1rem' }}>
+                    <MapPin size={14} style={{ color: '#1A6B7C', flexShrink: 0 }} />
+                    <span style={TITLE}>Borough Flood Frequency</span>
                 </div>
-
-                <div className="space-y-3">
-                    {data.boroughFrequency.map((b) => (
-                        <div key={b.borough}>
-                            <div className="flex items-center justify-between mb-1">
-                                <span className={cn("text-xs font-medium", BOROUGH_TEXT_COLORS[b.borough] || 'text-slate-300')}>
-                                    {b.borough}
-                                </span>
-                                <span className="text-xs text-slate-400">{b.events} events</span>
-                            </div>
-                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className={cn("h-full rounded-full transition-all duration-500", BOROUGH_COLORS[b.borough] || 'bg-slate-500')}
-                                    style={{ width: `${(b.events / maxBoroughEvents) * 100}%` }}
-                                />
-                            </div>
-                            <div className="flex gap-3 mt-1">
-                                <span className="text-[10px] text-slate-500">
-                                    Avg depth: {b.avgDepth}&quot;
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                    Avg duration: {formatDuration(b.avgDuration)}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {data.boroughFrequency.length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-4">No data available</p>
-                )}
-
-                <div className="mt-4 pt-3 border-t border-slate-800">
-                    <span className="text-[10px] text-slate-500">
-                        {data.totalEvents} total events across {data.totalSensors} sensors
-                    </span>
-                </div>
-            </Card>
-
-            {/* Hotspot Sensors */}
-            <Card className="bg-slate-900/80 border-slate-800 p-4">
-                <div className="flex items-center gap-2 mb-4">
-                    <Flame className="w-4 h-4 text-orange-400" />
-                    <h4 className="text-sm font-semibold text-white">Flood Hotspots</h4>
-                </div>
-
-                <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
-                    {data.hotspots.map((h, i) => (
-                        <div
-                            key={h.sensorId}
-                            className="flex items-center gap-2 p-2 bg-slate-800/40 rounded-lg"
-                        >
-                            <span className={cn(
-                                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
-                                i === 0 ? "bg-red-500/20 text-red-400" :
-                                i === 1 ? "bg-orange-500/20 text-orange-400" :
-                                i === 2 ? "bg-yellow-500/20 text-yellow-400" :
-                                "bg-slate-700 text-slate-400"
-                            )}>
-                                {i + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-xs font-medium text-white truncate">{h.name}</div>
-                                <div className="text-[10px] text-slate-500">
-                                    {h.borough} · Max: {h.maxDepth}&quot; · Avg: {formatDuration(h.avgDuration)}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                    {data.boroughFrequency.map((b) => {
+                        const color = BOROUGH_COLOR[b.borough] || '#3D4F58';
+                        return (
+                            <div key={b.borough}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.25rem' }}>
+                                    <span style={{ fontFamily: 'var(--font-jakarta)', fontSize: '12px', fontWeight: 600, color }}>{b.borough}</span>
+                                    <span style={META}>{b.events} events</span>
+                                </div>
+                                <div style={{ height: '6px', background: 'rgba(61,79,88,.07)', borderRadius: '3px', overflow: 'hidden', marginBottom: '.2rem' }}>
+                                    <div style={{ height: '100%', borderRadius: '3px', background: color, width: `${(b.events / maxBoroughEvents) * 100}%`, transition: 'width .5s' }} />
+                                </div>
+                                <div style={{ display: 'flex', gap: '.75rem' }}>
+                                    <span style={META}>Depth: {b.avgDepth}&quot;</span>
+                                    <span style={META}>Duration: {formatDuration(b.avgDuration)}</span>
                                 </div>
                             </div>
-                            <div className="flex flex-col items-end flex-shrink-0">
-                                <span className={cn(
-                                    "text-xs font-bold",
-                                    h.events >= 10 ? "text-red-400" :
-                                    h.events >= 5 ? "text-orange-400" : "text-yellow-400"
-                                )}>
-                                    {h.events}
-                                </span>
-                                <span className="text-[9px] text-slate-600">events</span>
+                        );
+                    })}
+                </div>
+                {data.boroughFrequency.length === 0 && (
+                    <p style={{ ...META, textAlign: 'center', padding: '1rem 0', textTransform: 'uppercase', letterSpacing: '.08em' }}>No data available</p>
+                )}
+                <div style={{ marginTop: '1rem', paddingTop: '.75rem', borderTop: '1px solid rgba(61,79,88,.07)' }}>
+                    <span style={META}>{data.totalEvents} total events · {data.totalSensors} sensors</span>
+                </div>
+            </div>
+
+            {/* Hotspot Sensors */}
+            <div style={CARD}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '1rem' }}>
+                    <Flame size={14} style={{ color: '#E8A030', flexShrink: 0 }} />
+                    <span style={TITLE}>Flood Hotspots</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.375rem', maxHeight: '320px', overflowY: 'auto' }}>
+                    {data.hotspots.map((h, i) => (
+                        <div key={h.sensorId} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', padding: '.5rem .625rem', background: 'rgba(61,79,88,.04)', borderRadius: '8px' }}>
+                            <span style={{
+                                width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontFamily: 'var(--font-plex-mono)', fontSize: '9px', fontWeight: 700,
+                                background: `${rankColor(i)}20`, color: rankColor(i),
+                            }}>
+                                {i + 1}
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontFamily: 'var(--font-jakarta)', fontSize: '12px', fontWeight: 600, color: '#3D4F58', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {h.name}
+                                </div>
+                                <div style={META}>{h.borough} · Max: {h.maxDepth}&quot; · {formatDuration(h.avgDuration)}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                                <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '12px', fontWeight: 700, color: eventColor(h.events) }}>{h.events}</span>
+                                <span style={META}>events</span>
                             </div>
                         </div>
                     ))}
                 </div>
-
                 {data.hotspots.length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-4">No data available</p>
+                    <p style={{ ...META, textAlign: 'center', padding: '1rem 0', textTransform: 'uppercase' }}>No data available</p>
                 )}
-            </Card>
+            </div>
 
             {/* Tidal vs Non-Tidal */}
-            <Card className="bg-slate-900/80 border-slate-800 p-4">
-                <div className="flex items-center gap-2 mb-4">
-                    <Waves className="w-4 h-4 text-cyan-400" />
-                    <h4 className="text-sm font-semibold text-white">Tidal vs Non-Tidal</h4>
+            <div style={CARD}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '1rem' }}>
+                    <Waves size={14} style={{ color: '#1A6B7C', flexShrink: 0 }} />
+                    <span style={TITLE}>Tidal vs Non-Tidal</span>
                 </div>
-
-                {(data.tidalComparison.tidal.events === 0 && data.tidalComparison.nonTidal.events === 0) ? (
-                    <p className="text-xs text-slate-500 text-center py-4">No data available</p>
+                {tidalTotal === 0 ? (
+                    <p style={{ ...META, textAlign: 'center', padding: '1rem 0', textTransform: 'uppercase' }}>No data available</p>
                 ) : (
                     <>
-                        {/* Event Count Comparison */}
-                        <div className="mb-4">
-                            <div className="text-[10px] text-slate-500 mb-1.5">Event Distribution</div>
-                            <div className="flex h-6 rounded-full overflow-hidden bg-slate-800">
+                        <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ ...META, marginBottom: '.375rem', textTransform: 'uppercase', letterSpacing: '.08em' }}>Event Distribution</div>
+                            <div style={{ display: 'flex', height: '22px', borderRadius: '20px', overflow: 'hidden', background: 'rgba(61,79,88,.07)' }}>
                                 {data.tidalComparison.tidal.events > 0 && (
-                                    <div
-                                        className="bg-cyan-500 flex items-center justify-center"
-                                        style={{
-                                            width: `${(data.tidalComparison.tidal.events / (data.tidalComparison.tidal.events + data.tidalComparison.nonTidal.events)) * 100}%`
-                                        }}
-                                    >
-                                        <span className="text-[9px] font-bold text-white">
+                                    <div style={{ width: `${(data.tidalComparison.tidal.events / tidalTotal) * 100}%`, background: '#1A6B7C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', fontWeight: 700, color: '#fff' }}>
                                             {data.tidalComparison.tidal.events}
                                         </span>
                                     </div>
                                 )}
                                 {data.tidalComparison.nonTidal.events > 0 && (
-                                    <div
-                                        className="bg-slate-500 flex items-center justify-center"
-                                        style={{
-                                            width: `${(data.tidalComparison.nonTidal.events / (data.tidalComparison.tidal.events + data.tidalComparison.nonTidal.events)) * 100}%`
-                                        }}
-                                    >
-                                        <span className="text-[9px] font-bold text-white">
+                                    <div style={{ width: `${(data.tidalComparison.nonTidal.events / tidalTotal) * 100}%`, background: 'rgba(61,79,88,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', fontWeight: 700, color: '#fff' }}>
                                             {data.tidalComparison.nonTidal.events}
                                         </span>
                                     </div>
                                 )}
                             </div>
-                            <div className="flex justify-between mt-1">
-                                <span className="text-[10px] text-cyan-400">
-                                    Tidal ({data.tidalComparison.sensorCount.tidal} sensors)
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                    Non-tidal ({data.tidalComparison.sensorCount.nonTidal} sensors)
-                                </span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.375rem' }}>
+                                <span style={{ ...META, color: '#2A8FA4' }}>Tidal ({data.tidalComparison.sensorCount.tidal} sensors)</span>
+                                <span style={META}>Non-tidal ({data.tidalComparison.sensorCount.nonTidal} sensors)</span>
                             </div>
                         </div>
-
-                        {/* Metric Comparison Table */}
-                        <div className="space-y-2">
-                            {[
-                                {
-                                    label: 'Avg Depth',
-                                    icon: Droplets,
-                                    tidal: `${data.tidalComparison.tidal.avgDepth}"`,
-                                    nonTidal: `${data.tidalComparison.nonTidal.avgDepth}"`,
-                                    tidalWorse: data.tidalComparison.tidal.avgDepth > data.tidalComparison.nonTidal.avgDepth,
-                                },
-                                {
-                                    label: 'Avg Duration',
-                                    icon: Clock,
-                                    tidal: formatDuration(data.tidalComparison.tidal.avgDuration),
-                                    nonTidal: formatDuration(data.tidalComparison.nonTidal.avgDuration),
-                                    tidalWorse: data.tidalComparison.tidal.avgDuration > data.tidalComparison.nonTidal.avgDuration,
-                                },
-                                {
-                                    label: 'Avg Onset',
-                                    icon: ArrowUp,
-                                    tidal: formatDuration(data.tidalComparison.tidal.avgOnset),
-                                    nonTidal: formatDuration(data.tidalComparison.nonTidal.avgOnset),
-                                    tidalWorse: data.tidalComparison.tidal.avgOnset < data.tidalComparison.nonTidal.avgOnset,
-                                },
-                                {
-                                    label: 'Avg Drain',
-                                    icon: ArrowDown,
-                                    tidal: formatDuration(data.tidalComparison.tidal.avgDrain),
-                                    nonTidal: formatDuration(data.tidalComparison.nonTidal.avgDrain),
-                                    tidalWorse: data.tidalComparison.tidal.avgDrain > data.tidalComparison.nonTidal.avgDrain,
-                                },
-                            ].map(({ label, icon: Icon, tidal, nonTidal, tidalWorse }) => (
-                                <div key={label} className="flex items-center gap-2 p-2 bg-slate-800/40 rounded-lg">
-                                    <Icon className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                                    <span className="text-[10px] text-slate-400 w-16 flex-shrink-0">{label}</span>
-                                    <div className="flex-1 flex justify-between">
-                                        <span className={cn(
-                                            "text-xs font-medium",
-                                            tidalWorse ? "text-cyan-400" : "text-cyan-400/60"
-                                        )}>
-                                            {tidal}
-                                        </span>
-                                        <span className={cn(
-                                            "text-xs font-medium",
-                                            !tidalWorse ? "text-slate-300" : "text-slate-300/60"
-                                        )}>
-                                            {nonTidal}
-                                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '.375rem' }}>
+                            {([
+                                { label: 'Avg Depth',    Icon: Droplets, tidal: `${data.tidalComparison.tidal.avgDepth}"`,            nonTidal: `${data.tidalComparison.nonTidal.avgDepth}"`,            tidalWorse: data.tidalComparison.tidal.avgDepth > data.tidalComparison.nonTidal.avgDepth },
+                                { label: 'Avg Duration', Icon: Clock,    tidal: formatDuration(data.tidalComparison.tidal.avgDuration), nonTidal: formatDuration(data.tidalComparison.nonTidal.avgDuration), tidalWorse: data.tidalComparison.tidal.avgDuration > data.tidalComparison.nonTidal.avgDuration },
+                                { label: 'Avg Onset',    Icon: ArrowUp,  tidal: formatDuration(data.tidalComparison.tidal.avgOnset),   nonTidal: formatDuration(data.tidalComparison.nonTidal.avgOnset),   tidalWorse: data.tidalComparison.tidal.avgOnset < data.tidalComparison.nonTidal.avgOnset },
+                                { label: 'Avg Drain',    Icon: ArrowDown,tidal: formatDuration(data.tidalComparison.tidal.avgDrain),   nonTidal: formatDuration(data.tidalComparison.nonTidal.avgDrain),   tidalWorse: data.tidalComparison.tidal.avgDrain > data.tidalComparison.nonTidal.avgDrain },
+                            ] as const).map(({ label, Icon, tidal, nonTidal, tidalWorse }) => (
+                                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', padding: '.375rem .5rem', background: 'rgba(61,79,88,.04)', borderRadius: '6px' }}>
+                                    <Icon size={11} style={{ color: 'rgba(61,79,88,.3)', flexShrink: 0 }} />
+                                    <span style={{ ...META, width: '68px', flexShrink: 0, textTransform: 'uppercase' }}>{label}</span>
+                                    <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', fontWeight: 500, color: tidalWorse ? '#2A8FA4' : 'rgba(42,143,164,.45)' }}>{tidal}</span>
+                                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', fontWeight: 500, color: !tidalWorse ? '#3D4F58' : 'rgba(61,79,88,.35)' }}>{nonTidal}</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
-
-                        {/* Legend */}
-                        <div className="flex justify-between mt-3 pt-2 border-t border-slate-800">
-                            <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 rounded-full bg-cyan-500" />
-                                <span className="text-[10px] text-slate-500">Tidal</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '.875rem', paddingTop: '.625rem', borderTop: '1px solid rgba(61,79,88,.07)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem' }}>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1A6B7C' }} />
+                                <span style={META}>Tidal</span>
                             </div>
-                            <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 rounded-full bg-slate-500" />
-                                <span className="text-[10px] text-slate-500">Non-tidal</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem' }}>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'rgba(61,79,88,.35)' }} />
+                                <span style={META}>Non-tidal</span>
                             </div>
                         </div>
                     </>
                 )}
-            </Card>
+            </div>
         </div>
     );
 }

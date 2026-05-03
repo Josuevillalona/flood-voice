@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import {
     type Lang,
     T,
@@ -41,14 +41,16 @@ function generateFormId(): string {
     return `FV-${d}-${r}`;
 }
 
-// ─── Reusable styled sub-components ───────────────────────────────────────────
-// Sizes tuned for tablet at arm's length: section headers and labels at 13px,
-// inputs at 15px, tap targets at 20px. Inputs use py-2.5 so the touch zone is
-// comfortably > 40px tall.
-const inputCls = 'w-full text-[15px] px-3 py-2.5 border border-gray-300 rounded-md bg-white text-gray-900 outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#E6F1FB]';
-const labelCls = 'block text-[13px] font-medium text-[#0C447C] mb-1';
-const checkboxCls = 'w-5 h-5 accent-[#0C447C] cursor-pointer';
-const checkItemCls = 'flex items-center gap-2 text-[14px] text-gray-800 cursor-pointer';
+// ─── Shared style constants ────────────────────────────────────────────────────
+const inputCls = [
+    'w-full text-[15px] px-3 py-2.5 rounded-md bg-white text-[#3D4F58] outline-none',
+    'border border-[rgba(61,79,88,.18)]',
+    'focus:border-[#1A6B7C] focus:ring-2 focus:ring-[rgba(26,107,124,.12)]',
+].join(' ');
+
+const labelCls = 'block text-[13px] font-medium text-[#1A6B7C] mb-1';
+const checkboxCls = 'w-5 h-5 accent-[#1A6B7C] cursor-pointer';
+const checkItemCls = 'flex items-center gap-2 text-[14px] text-[#3D4F58] cursor-pointer';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
@@ -60,20 +62,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SectionHeader({ text }: { text: string }) {
-    return <div className="bg-[#0C447C] text-[#E6F1FB] text-[14px] font-medium px-3 py-2 rounded-t-lg tracking-wide">{text}</div>;
+    return (
+        <div className="px-3 py-2 rounded-t-lg tracking-wide text-[14px] font-medium"
+            style={{ background: '#1A6B7C', color: '#fff', fontFamily: 'var(--font-jakarta)' }}>
+            {text}
+        </div>
+    );
 }
 
 function SectionBody({ children }: { children: React.ReactNode }) {
-    return <div className="border border-t-0 border-gray-300 rounded-b-lg p-3 bg-white space-y-3">{children}</div>;
+    return (
+        <div className="border border-t-0 rounded-b-lg p-3 bg-white space-y-3"
+            style={{ borderColor: 'rgba(61,79,88,.15)' }}>
+            {children}
+        </div>
+    );
 }
 
-function YesNo({ name, value, onChange, yesLabel, noLabel }: { name: string; value: string; onChange: (v: string) => void; yesLabel: string; noLabel: string }) {
+function YesNo({ name, value, onChange, yesLabel, noLabel }: {
+    name: string; value: string; onChange: (v: string) => void; yesLabel: string; noLabel: string;
+}) {
     return (
         <div className="flex gap-5">
             {[['yes', yesLabel], ['no', noLabel]].map(([v, lbl]) => (
                 <label key={v} className={checkItemCls}>
-                    <input type="radio" name={name} value={v} checked={value === v} onChange={() => onChange(v)}
-                        className={checkboxCls} />
+                    <input type="radio" name={name} value={v} checked={value === v}
+                        onChange={() => onChange(v)} className={checkboxCls} />
                     {lbl}
                 </label>
             ))}
@@ -81,61 +95,39 @@ function YesNo({ name, value, onChange, yesLabel, noLabel }: { name: string; val
     );
 }
 
-// ─── Main Page Component ──────────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function IntakePage() {
     const [lang, setLangState] = useState<Lang>('en');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [form, setForm] = useState<IntakeFormData>(emptyForm);
 
-    // Rehydrate the canvasser's last-used language on first mount so the form
-    // opens in their language instead of always resetting to English. Reads
-    // from window.localStorage, which is only available client-side — hence the
-    // useEffect rather than a useState initializer (initial render is SSR'd).
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical client-only persistence rehydration pattern
         setLangState(loadStoredLang());
     }, []);
 
-    const setLang = (next: Lang) => {
-        setLangState(next);
-        saveLang(next);
-    };
-
+    const setLang = (next: Lang) => { setLangState(next); saveLang(next); };
     const t = T[lang];
     const upd = (field: keyof IntakeFormData, val: IntakeFormData[keyof IntakeFormData]) =>
         setForm(p => ({ ...p, [field]: val }));
 
-    // Picking a preferred-language radio in Section 1 also switches the form's
-    // display language when the picked language is one of the supported tab langs.
-    // Single-select — the resident has one primary preferred language.
     const selectPrefLang = (idx: number) => {
         setForm(prev => ({ ...prev, preferredLang: idx }));
         const code = PREF_LANG_CODES[idx];
-        if ((LANG_CODES as readonly string[]).includes(code)) {
-            setLang(code as Lang);
-        }
+        if ((LANG_CODES as readonly string[]).includes(code)) setLang(code as Lang);
     };
 
-    const startNewRegistration = () => {
-        setForm(emptyForm());
-        setIsSuccess(false);
-    };
+    const startNewRegistration = () => { setForm(emptyForm()); setIsSuccess(false); };
 
     const handleSubmit = async () => {
-        const missing = !form.name || !form.phone || !form.address || !form.signature;
-        if (missing) {
+        if (!form.name || !form.phone || !form.address || !form.signature) {
             alert(t.validationMsg);
             return;
         }
         setIsSubmitting(true);
         const { data: { user } } = await supabase.auth.getUser();
-
-        // Map the picked index into PREF_LANG_CODES so the language column gets a
-        // real 2-letter code (en/es/bn/zh/ko/ht/other) instead of a slice of a label.
-        const langCode = form.preferredLang !== null
-            ? PREF_LANG_CODES[form.preferredLang]
-            : lang;
+        const langCode = form.preferredLang !== null ? PREF_LANG_CODES[form.preferredLang] : lang;
 
         const { error } = await supabase.from('residents').insert({
             name: form.name,
@@ -146,7 +138,6 @@ export default function IntakePage() {
             language: langCode,
             status: 'pending',
             liaison_id: user?.id || '00000000-0000-0000-0000-000000000000',
-            // New intake columns (require migration_intake_form.sql to be run first)
             date_of_birth: form.dob || null,
             alternate_phone: form.altPhone || null,
             email: form.email || null,
@@ -170,191 +161,291 @@ export default function IntakePage() {
             neighborhood: form.neighborhood || null,
             form_id: form.formId,
         });
+
         setIsSubmitting(false);
-        if (!error) { setIsSuccess(true); }
-        else { alert('Error saving registration: ' + error.message); }
+        if (!error) setIsSuccess(true);
+        else alert('Error saving registration: ' + error.message);
     };
 
     return (
-        <div className="max-w-xl mx-auto pb-10" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-
-            {/* ── Header ── */}
-            <div className="bg-[#0C447C] px-4 py-3 rounded-t-xl">
-                <h1 className="text-[#E6F1FB] text-[16px] font-medium">{t.title}</h1>
-                <p className="text-[#85B7EB] text-[12px]">{t.sub}</p>
+        <div style={{ fontFamily: 'var(--font-noto), sans-serif' }}>
+            {/* Page header */}
+            <div className="db-ph">
+                <div>
+                    <h1 className="db-ph-title">Intake Form</h1>
+                    <p className="db-ph-sub">Register residents for emergency check-in monitoring.</p>
+                </div>
+                {/* Form ID chip */}
+                <span style={{
+                    fontFamily: 'var(--font-plex-mono)', fontSize: '11px', letterSpacing: '.06em',
+                    color: 'rgba(61,79,88,.45)', background: 'rgba(61,79,88,.06)',
+                    padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(61,79,88,.1)',
+                }}>
+                    {form.formId}
+                </span>
             </div>
-            <div className="h-1 bg-[#EF9F27]" />
 
-            {/* ── Privacy Notice ── */}
-            <div className="mx-0 mt-3 px-3 py-2.5 bg-[#FFF8EC] border-l-4 border-[#EF9F27] rounded-r-md text-[12px] text-[#5C3000] leading-relaxed">
-                {t.privacy}
-            </div>
+            {/* Form document */}
+            <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '3rem' }}>
 
-            <div className="space-y-3.5 mt-3.5">
+                {/* Document header */}
+                <div style={{ background: '#1A6B7C', padding: '14px 16px', borderRadius: '10px 10px 0 0' }}>
+                    <h2 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '16px', fontWeight: 600, color: '#fff', margin: 0 }}>
+                        {t.title}
+                    </h2>
+                    <p style={{ fontFamily: 'var(--font-noto)', fontSize: '12px', color: 'rgba(255,255,255,.65)', marginTop: '2px' }}>
+                        {t.sub}
+                    </p>
+                </div>
+                {/* Amber accent stripe */}
+                <div style={{ height: '3px', background: '#E8A030' }} />
 
-                {/* ── Section 1: Preferred Language ── */}
-                {/* Single-select. Picking a language also switches the form's */}
-                {/* display language when it's a supported tab language.       */}
-                <div>
-                    <SectionHeader text={t.sPrefLang} />
-                    <SectionBody>
-                        {/* Slice to LANG_CODES.length so the picker shows only the */}
-                        {/* languages we actually support in this phase. Phase 2     */}
-                        {/* expands LANG_CODES to en/es/bn/zh/ko/ht and the picker   */}
-                        {/* grows automatically. */}
-                        <div className="flex flex-wrap gap-x-5 gap-y-2.5">
-                            {LANG_NATIVE_LABELS.slice(0, LANG_CODES.length).map((nativeLbl, i) => (
-                                <label key={i} className={checkItemCls}>
-                                    <input type="radio" name="preferred_lang" checked={form.preferredLang === i} onChange={() => selectPrefLang(i)} className={checkboxCls} />
-                                    {nativeLbl ?? t.other}
-                                </label>
-                            ))}
-                        </div>
-                    </SectionBody>
+                {/* Privacy notice */}
+                <div style={{
+                    margin: '12px 0',
+                    padding: '10px 12px',
+                    background: 'rgba(232,160,48,.08)',
+                    borderLeft: '3px solid #E8A030',
+                    borderRadius: '0 6px 6px 0',
+                    fontFamily: 'var(--font-noto)',
+                    fontSize: '12px',
+                    color: '#3D4F58',
+                    lineHeight: 1.6,
+                }}>
+                    {t.privacy}
                 </div>
 
-                {/* ── Section 2: Personal Information ── */}
-                <div>
-                    <SectionHeader text={t.sPersonal} />
-                    <SectionBody>
-                        <Field label={t.name}><input className={inputCls} type="text" autoComplete="name" value={form.name} onChange={e => upd('name', e.target.value)} /></Field>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.dob}><input className={inputCls} type="date" value={form.dob} onChange={e => upd('dob', e.target.value)} /></Field>
-                            <Field label={t.phone}><input className={inputCls} type="tel" autoComplete="tel" value={form.phone} onChange={e => upd('phone', e.target.value)} /></Field>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.altPhone}><input className={inputCls} type="tel" value={form.altPhone} onChange={e => upd('altPhone', e.target.value)} /></Field>
-                            <Field label={t.email}><input className={inputCls} type="email" autoComplete="email" value={form.email} onChange={e => upd('email', e.target.value)} /></Field>
-                        </div>
-                    </SectionBody>
-                </div>
+                <div className="space-y-3.5">
 
-                {/* ── Section 3: Household & Housing ── */}
-                <div>
-                    <SectionHeader text={t.sHousehold} />
-                    <SectionBody>
-                        <Field label={t.address}><input className={inputCls} type="text" autoComplete="street-address" value={form.address} onChange={e => upd('address', e.target.value)} /></Field>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.borough}><input className={inputCls} type="text" value={form.borough} onChange={e => upd('borough', e.target.value)} /></Field>
-                            <Field label={t.floor}><input className={inputCls} type="text" value={form.floor} onChange={e => upd('floor', e.target.value)} /></Field>
-                        </div>
-                        <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                            <span className={labelCls + ' mb-0'}>{t.basement}</span>
-                            <YesNo name="basement" value={form.basement} onChange={v => upd('basement', v)} yesLabel={t.yes} noLabel={t.no} />
-                        </div>
-                        <Field label={t.household}><input className={inputCls} type="number" min="1" max="20" style={{ width: 100 }} value={form.household} onChange={e => upd('household', e.target.value)} /></Field>
-                    </SectionBody>
-                </div>
-
-                {/* ── Section 4: Emergency Contact ── */}
-                <div>
-                    <SectionHeader text={t.sKin} />
-                    <SectionBody>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.kinName}><input className={inputCls} type="text" value={form.kinName} onChange={e => upd('kinName', e.target.value)} /></Field>
-                            <Field label={t.kinPhone}><input className={inputCls} type="tel" value={form.kinPhone} onChange={e => upd('kinPhone', e.target.value)} /></Field>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.kinRel}><input className={inputCls} type="text" value={form.kinRel} onChange={e => upd('kinRel', e.target.value)} /></Field>
-                            <Field label={t.kinAddr}><input className={inputCls} type="text" value={form.kinAddr} onChange={e => upd('kinAddr', e.target.value)} /></Field>
-                        </div>
-                    </SectionBody>
-                </div>
-
-                {/* ── Section 5: Health & Access Needs ── */}
-                <div>
-                    <SectionHeader text={t.sHealth} />
-                    <SectionBody>
-                        <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                            <span className={labelCls + ' mb-0'}>{t.disability}</span>
-                            <YesNo name="disability" value={form.disability} onChange={v => upd('disability', v)} yesLabel={t.yes} noLabel={t.no} />
-                        </div>
-                        {form.disability === 'yes' && (
-                            <Field label={t.disabilityDesc}><input className={inputCls} type="text" value={form.disabilityDesc} onChange={e => upd('disabilityDesc', e.target.value)} /></Field>
-                        )}
-                        <Field label={t.medical}>
-                            <textarea className={inputCls + ' resize-none h-16'} value={form.medical} onChange={e => upd('medical', e.target.value)} />
-                        </Field>
-                    </SectionBody>
-                </div>
-
-                {/* ── Section 6: Contact Preferences (no longer holds language) ── */}
-                <div>
-                    <SectionHeader text={t.sContact} />
-                    <SectionBody>
-                        <div>
-                            <label className={labelCls}>{t.contactPref}</label>
-                            <div className="flex flex-wrap gap-x-5 gap-y-2.5 mt-1">
-                                {[['call', t.call], ['sms', t.sms], ['both', t.both]].map(([v, lbl]) => (
-                                    <label key={v} className={checkItemCls}>
-                                        <input type="radio" name="contact_method" value={v} checked={form.contactMethod === v} onChange={() => upd('contactMethod', v)} className={checkboxCls} />
-                                        {lbl}
+                    {/* Section 1 — Preferred Language */}
+                    <div>
+                        <SectionHeader text={t.sPrefLang} />
+                        <SectionBody>
+                            <div className="flex flex-wrap gap-x-5 gap-y-2.5">
+                                {LANG_NATIVE_LABELS.slice(0, LANG_CODES.length).map((nativeLbl, i) => (
+                                    <label key={i} className={checkItemCls}>
+                                        <input type="radio" name="preferred_lang" checked={form.preferredLang === i}
+                                            onChange={() => selectPrefLang(i)} className={checkboxCls} />
+                                        {nativeLbl ?? t.other}
                                     </label>
                                 ))}
                             </div>
-                        </div>
-                        <div>
-                            <label className={labelCls}>{t.bestTime}</label>
-                            <div className="flex flex-wrap gap-x-5 gap-y-2.5 mt-1">
-                                {[['morning', t.morning], ['afternoon', t.afternoon], ['evening', t.evening], ['anytime', t.anytime]].map(([v, lbl]) => (
-                                    <label key={v} className={checkItemCls}>
-                                        <input type="radio" name="best_time" value={v} checked={form.bestTime === v} onChange={() => upd('bestTime', v)} className={checkboxCls} />
-                                        {lbl}
-                                    </label>
-                                ))}
+                        </SectionBody>
+                    </div>
+
+                    {/* Section 2 — Personal Information */}
+                    <div>
+                        <SectionHeader text={t.sPersonal} />
+                        <SectionBody>
+                            <Field label={t.name}>
+                                <input className={inputCls} type="text" autoComplete="name" value={form.name} onChange={e => upd('name', e.target.value)} />
+                            </Field>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.dob}>
+                                    <input className={inputCls} type="date" value={form.dob} onChange={e => upd('dob', e.target.value)} />
+                                </Field>
+                                <Field label={t.phone}>
+                                    <input className={inputCls} type="tel" autoComplete="tel" value={form.phone} onChange={e => upd('phone', e.target.value)} />
+                                </Field>
                             </div>
-                        </div>
-                    </SectionBody>
-                </div>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.altPhone}>
+                                    <input className={inputCls} type="tel" value={form.altPhone} onChange={e => upd('altPhone', e.target.value)} />
+                                </Field>
+                                <Field label={t.email}>
+                                    <input className={inputCls} type="email" autoComplete="email" value={form.email} onChange={e => upd('email', e.target.value)} />
+                                </Field>
+                            </div>
+                        </SectionBody>
+                    </div>
 
-                {/* ── Section 7: Consent ── */}
-                <div>
-                    <SectionHeader text={t.sConsent} />
-                    <SectionBody>
-                        <p className="text-[13px] text-gray-700 leading-relaxed">{t.consent}</p>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.signature}><input className={inputCls} type="text" placeholder={t.signaturePlaceholder} value={form.signature} onChange={e => upd('signature', e.target.value)} /></Field>
-                            <Field label={t.date}><input className={inputCls} type="date" value={form.consentDate} onChange={e => upd('consentDate', e.target.value)} /></Field>
-                        </div>
-                    </SectionBody>
-                </div>
+                    {/* Section 3 — Household & Housing */}
+                    <div>
+                        <SectionHeader text={t.sHousehold} />
+                        <SectionBody>
+                            <Field label={t.address}>
+                                <input className={inputCls} type="text" autoComplete="street-address" value={form.address} onChange={e => upd('address', e.target.value)} />
+                            </Field>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.borough}>
+                                    <input className={inputCls} type="text" value={form.borough} onChange={e => upd('borough', e.target.value)} />
+                                </Field>
+                                <Field label={t.floor}>
+                                    <input className={inputCls} type="text" value={form.floor} onChange={e => upd('floor', e.target.value)} />
+                                </Field>
+                            </div>
+                            <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid rgba(61,79,88,.08)' }}>
+                                <span className={labelCls + ' mb-0'}>{t.basement}</span>
+                                <YesNo name="basement" value={form.basement} onChange={v => upd('basement', v)} yesLabel={t.yes} noLabel={t.no} />
+                            </div>
+                            <Field label={t.household}>
+                                <input className={inputCls} type="number" min="1" max="20" style={{ width: 100 }}
+                                    value={form.household} onChange={e => upd('household', e.target.value)} />
+                            </Field>
+                        </SectionBody>
+                    </div>
 
-                {/* ── Liaison Section ── */}
-                <div className="bg-gray-50 rounded-xl border border-gray-300 overflow-hidden">
-                    <div className="bg-[#185FA5] text-[#E6F1FB] text-[13px] font-medium px-3 py-2">{t.forLiaison}</div>
-                    <div className="p-3 space-y-3">
-                        <div className="grid grid-cols-3 gap-2.5">
-                            <Field label={t.liaisonName}><input className={inputCls} type="text" value={form.liaisonName} onChange={e => upd('liaisonName', e.target.value)} /></Field>
-                            <Field label={t.liaisonOrg}><input className={inputCls} type="text" value={form.liaisonOrg} onChange={e => upd('liaisonOrg', e.target.value)} /></Field>
-                            <Field label={t.regDate}><input className={inputCls} type="date" value={form.regDate} onChange={e => upd('regDate', e.target.value)} /></Field>
+                    {/* Section 4 — Emergency Contact */}
+                    <div>
+                        <SectionHeader text={t.sKin} />
+                        <SectionBody>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.kinName}>
+                                    <input className={inputCls} type="text" value={form.kinName} onChange={e => upd('kinName', e.target.value)} />
+                                </Field>
+                                <Field label={t.kinPhone}>
+                                    <input className={inputCls} type="tel" value={form.kinPhone} onChange={e => upd('kinPhone', e.target.value)} />
+                                </Field>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.kinRel}>
+                                    <input className={inputCls} type="text" value={form.kinRel} onChange={e => upd('kinRel', e.target.value)} />
+                                </Field>
+                                <Field label={t.kinAddr}>
+                                    <input className={inputCls} type="text" value={form.kinAddr} onChange={e => upd('kinAddr', e.target.value)} />
+                                </Field>
+                            </div>
+                        </SectionBody>
+                    </div>
+
+                    {/* Section 5 — Health & Access Needs */}
+                    <div>
+                        <SectionHeader text={t.sHealth} />
+                        <SectionBody>
+                            <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid rgba(61,79,88,.08)' }}>
+                                <span className={labelCls + ' mb-0'}>{t.disability}</span>
+                                <YesNo name="disability" value={form.disability} onChange={v => upd('disability', v)} yesLabel={t.yes} noLabel={t.no} />
+                            </div>
+                            {form.disability === 'yes' && (
+                                <Field label={t.disabilityDesc}>
+                                    <input className={inputCls} type="text" value={form.disabilityDesc} onChange={e => upd('disabilityDesc', e.target.value)} />
+                                </Field>
+                            )}
+                            <Field label={t.medical}>
+                                <textarea className={inputCls + ' resize-none h-16'} value={form.medical} onChange={e => upd('medical', e.target.value)} />
+                            </Field>
+                        </SectionBody>
+                    </div>
+
+                    {/* Section 6 — Contact Preferences */}
+                    <div>
+                        <SectionHeader text={t.sContact} />
+                        <SectionBody>
+                            <div>
+                                <label className={labelCls}>{t.contactPref}</label>
+                                <div className="flex flex-wrap gap-x-5 gap-y-2.5 mt-1">
+                                    {[['call', t.call], ['sms', t.sms], ['both', t.both]].map(([v, lbl]) => (
+                                        <label key={v} className={checkItemCls}>
+                                            <input type="radio" name="contact_method" value={v}
+                                                checked={form.contactMethod === v} onChange={() => upd('contactMethod', v)} className={checkboxCls} />
+                                            {lbl}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className={labelCls}>{t.bestTime}</label>
+                                <div className="flex flex-wrap gap-x-5 gap-y-2.5 mt-1">
+                                    {[['morning', t.morning], ['afternoon', t.afternoon], ['evening', t.evening], ['anytime', t.anytime]].map(([v, lbl]) => (
+                                        <label key={v} className={checkItemCls}>
+                                            <input type="radio" name="best_time" value={v}
+                                                checked={form.bestTime === v} onChange={() => upd('bestTime', v)} className={checkboxCls} />
+                                            {lbl}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        </SectionBody>
+                    </div>
+
+                    {/* Section 7 — Consent */}
+                    <div>
+                        <SectionHeader text={t.sConsent} />
+                        <SectionBody>
+                            <p style={{ fontFamily: 'var(--font-noto)', fontSize: '13px', color: 'rgba(61,79,88,.7)', lineHeight: 1.6 }}>
+                                {t.consent}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.signature}>
+                                    <input className={inputCls} type="text" placeholder={t.signaturePlaceholder}
+                                        value={form.signature} onChange={e => upd('signature', e.target.value)} />
+                                </Field>
+                                <Field label={t.date}>
+                                    <input className={inputCls} type="date" value={form.consentDate} onChange={e => upd('consentDate', e.target.value)} />
+                                </Field>
+                            </div>
+                        </SectionBody>
+                    </div>
+
+                    {/* Liaison Section */}
+                    <div style={{ background: 'rgba(61,79,88,.03)', borderRadius: '10px', border: '1px solid rgba(61,79,88,.1)', overflow: 'hidden' }}>
+                        <div style={{ background: '#2A8FA4', color: '#fff', fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 600, padding: '8px 12px' }}>
+                            {t.forLiaison}
                         </div>
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <Field label={t.neighborhood}><input className={inputCls} type="text" value={form.neighborhood} onChange={e => upd('neighborhood', e.target.value)} /></Field>
-                            <Field label={t.formId}><input className={inputCls} type="text" value={form.formId} onChange={e => upd('formId', e.target.value)} /></Field>
+                        <div className="p-3 space-y-3">
+                            <div className="grid grid-cols-3 gap-2.5">
+                                <Field label={t.liaisonName}>
+                                    <input className={inputCls} type="text" value={form.liaisonName} onChange={e => upd('liaisonName', e.target.value)} />
+                                </Field>
+                                <Field label={t.liaisonOrg}>
+                                    <input className={inputCls} type="text" value={form.liaisonOrg} onChange={e => upd('liaisonOrg', e.target.value)} />
+                                </Field>
+                                <Field label={t.regDate}>
+                                    <input className={inputCls} type="date" value={form.regDate} onChange={e => upd('regDate', e.target.value)} />
+                                </Field>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <Field label={t.neighborhood}>
+                                    <input className={inputCls} type="text" value={form.neighborhood} onChange={e => upd('neighborhood', e.target.value)} />
+                                </Field>
+                                <Field label={t.formId}>
+                                    <input className={inputCls} type="text" value={form.formId} onChange={e => upd('formId', e.target.value)} />
+                                </Field>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* ── Required Note + Submit ── */}
-                <p className="text-[12px] text-red-600">{t.req}</p>
+                    {/* Required note */}
+                    <p style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', color: '#C4622D', letterSpacing: '.04em' }}>
+                        {t.req}
+                    </p>
 
-                {!isSuccess ? (
-                    <button onClick={handleSubmit} disabled={isSubmitting}
-                        className="w-full py-3.5 bg-[#0C447C] hover:bg-[#185FA5] text-[#E6F1FB] text-[15px] font-medium rounded-xl transition-colors disabled:opacity-60">
-                        {isSubmitting ? '...' : t.submitBtn}
-                    </button>
-                ) : (
-                    <div className="p-5 bg-[#E6F1FB] border border-[#378ADD] rounded-xl text-center">
-                        <CheckCircle className="w-8 h-8 text-[#0C447C] mx-auto mb-2" />
-                        <h3 className="text-[#0C447C] text-[16px] font-medium mb-1">{t.successTitle}</h3>
-                        <p className="text-[14px] text-[#185FA5] mb-4">{t.successBody}</p>
-                        <button onClick={startNewRegistration}
-                            className="px-5 py-2.5 bg-[#0C447C] hover:bg-[#185FA5] text-[#E6F1FB] text-[14px] font-medium rounded-lg transition-colors">
-                            {t.newRegistrationBtn}
+                    {/* Submit / Success */}
+                    {!isSuccess ? (
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                            className="db-ph-btn"
+                            style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', borderRadius: '10px', opacity: isSubmitting ? 0.6 : 1 }}
+                        >
+                            {isSubmitting ? '...' : t.submitBtn}
                         </button>
-                    </div>
-                )}
+                    ) : (
+                        <div style={{
+                            padding: '1.5rem',
+                            background: 'rgba(26,107,124,.08)',
+                            border: '1px solid rgba(26,107,124,.2)',
+                            borderRadius: '12px',
+                            textAlign: 'center',
+                        }}>
+                            <CheckCircle2 size={32} style={{ color: '#1A6B7C', margin: '0 auto 8px' }} />
+                            <h3 style={{ fontFamily: 'var(--font-jakarta)', fontSize: '16px', fontWeight: 700, color: '#1A6B7C', marginBottom: '4px' }}>
+                                {t.successTitle}
+                            </h3>
+                            <p style={{ fontFamily: 'var(--font-noto)', fontSize: '14px', color: '#2A8FA4', marginBottom: '1rem' }}>
+                                {t.successBody}
+                            </p>
+                            <button
+                                onClick={startNewRegistration}
+                                className="db-ph-btn"
+                                style={{ margin: '0 auto', padding: '10px 24px' }}
+                            >
+                                {t.newRegistrationBtn}
+                            </button>
+                        </div>
+                    )}
 
+                </div>
             </div>
         </div>
     );

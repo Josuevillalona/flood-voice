@@ -69,12 +69,12 @@ export async function GET() {
 
             if (latest.avgScore > previous.avgScore + 0.5) {
                 const pctChange = Math.round(((latest.avgScore - previous.avgScore) / previous.avgScore) * 100);
-                insight = `⚠️ Distress levels up ${pctChange}% this week`;
+                insight = `Distress up ${pctChange}% this week`;
             } else if (latest.avgScore < previous.avgScore - 0.5) {
                 const pctChange = Math.round(((previous.avgScore - latest.avgScore) / previous.avgScore) * 100);
-                insight = `✅ Distress levels down ${pctChange}% this week`;
+                insight = `Distress down ${pctChange}% this week`;
             } else {
-                insight = '➡️ Distress levels stable week-over-week';
+                insight = 'Distress stable week-over-week';
             }
         }
 

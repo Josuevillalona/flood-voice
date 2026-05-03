@@ -95,8 +95,6 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
 
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Compose the fields that don't have dedicated columns into health_conditions
-        // so nothing is silently dropped.
         const extras: string[] = [];
         if (form.medical.trim()) extras.push(`Medical: ${form.medical.trim()}`);
         if (form.disability === 'yes') {
@@ -115,7 +113,6 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
 
         const firstPrefLang = form.prefLang !== null ? PREF_LANG_CODES[form.prefLang] : lang;
 
-        // Pull any 5-digit ZIP out of the borough/zip field for our zip_code column
         const zipMatch = form.borough.match(/\b\d{5}\b/);
         const zip = zipMatch ? zipMatch[0] : form.borough.trim();
 
@@ -154,35 +151,35 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
                 <DialogDescription className="sr-only">{t.sub}</DialogDescription>
                 <div className="max-h-[92vh] overflow-y-auto">
                     {/* Header */}
-                    <div className="bg-[#0C447C] px-4 py-3">
-                        <h1 className="text-[#E6F1FB] text-[16px] font-medium leading-tight">{t.title}</h1>
-                        <p className="text-[#85B7EB] text-[12px] mt-0.5">{t.sub}</p>
+                    <div className="bg-[#1A6B7C] px-4 py-3">
+                        <h1 className="text-white text-[16px] font-medium leading-tight">{t.title}</h1>
+                        <p className="text-[rgba(255,255,255,0.65)] text-[12px] mt-0.5">{t.sub}</p>
                     </div>
-                    <div className="h-1 bg-[#EF9F27]" />
+                    <div className="h-1 bg-[#E8A030]" />
 
                     {/* Privacy notice */}
-                    <div className="mx-3 mt-3 p-2.5 bg-[#FFF8EC] border-l-[3px] border-[#EF9F27] rounded-r text-[12px] text-[#5C3000] leading-relaxed">
+                    <div className="mx-3 mt-3 p-2.5 bg-[rgba(232,160,48,0.08)] border-l-[3px] border-[#E8A030] rounded-r text-[12px] text-[#3D4F58] leading-relaxed">
                         {t.privacy}
                     </div>
 
                     {/* Form body */}
                     {success ? (
                         <div className="px-3 pb-5">
-                            <div className="mt-4 p-4 bg-[#E6F1FB] border border-[#378ADD] rounded-xl text-center">
-                                <h3 className="text-[#0C447C] text-[16px] font-medium mb-1.5">{t.successTitle}</h3>
-                                <p className="text-[14px] text-[#185FA5] mb-4">{t.successBody}</p>
+                            <div className="mt-4 p-4 bg-[rgba(26,107,124,0.07)] border border-[rgba(26,107,124,0.25)] rounded-xl text-center">
+                                <h3 className="text-[#1A6B7C] text-[16px] font-medium mb-1.5">{t.successTitle}</h3>
+                                <p className="text-[14px] text-[#2A8FA4] mb-4">{t.successBody}</p>
                                 <div className="flex flex-wrap justify-center gap-2.5">
                                     <button
                                         type="button"
                                         onClick={startNewRegistration}
-                                        className="px-5 py-2.5 bg-[#0C447C] hover:bg-[#185FA5] text-[#E6F1FB] text-[14px] font-medium rounded-lg"
+                                        className="px-5 py-2.5 bg-[#1A6B7C] hover:bg-[#2A8FA4] text-white text-[14px] font-medium rounded-lg"
                                     >
                                         {t.newRegistrationBtn}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => onOpenChange(false)}
-                                        className="px-5 py-2.5 bg-white hover:bg-gray-50 text-[#0C447C] text-[14px] font-medium border border-[#0C447C] rounded-lg"
+                                        className="px-5 py-2.5 bg-white hover:bg-gray-50 text-[#1A6B7C] text-[14px] font-medium border border-[rgba(26,107,124,0.3)] rounded-lg"
                                     >
                                         {t.closeBtn}
                                     </button>
@@ -362,7 +359,7 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
 
                             {/* Liaison section */}
                             <div className="mt-3.5 bg-[#F4F6F9] rounded-xl border border-[#ccc] overflow-hidden">
-                                <div className="bg-[#185FA5] text-[#E6F1FB] text-[13px] font-medium px-2.5 py-2">
+                                <div className="bg-[#2A8FA4] text-white text-[13px] font-medium px-2.5 py-2">
                                     {t.forLiaison}
                                 </div>
                                 <div className="p-3 space-y-2.5">
@@ -393,12 +390,12 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
                                 </div>
                             </div>
 
-                            <p className="text-[12px] text-[#CC0000] mt-2">{t.req}</p>
+                            <p className="text-[12px] text-[#C4622D] mt-2">{t.req}</p>
                             <button
                                 type="button"
                                 onClick={handleSubmit}
                                 disabled={submitting}
-                                className="block w-full mt-4 py-3.5 bg-[#0C447C] hover:bg-[#185FA5] text-[#E6F1FB] text-[15px] font-medium rounded-xl disabled:opacity-60"
+                                className="block w-full mt-4 py-3.5 bg-[#1A6B7C] hover:bg-[#2A8FA4] text-white text-[15px] font-medium rounded-xl disabled:opacity-60"
                             >
                                 {submitting ? '...' : t.submitBtn}
                             </button>
@@ -415,14 +412,14 @@ export function ResidentIntakeDialog({ open, onOpenChange, onSaved }: Props) {
 // Sizes tuned for tablet at arm's length: labels 13px, inputs 15px with py-2.5
 // padding (touch zone ~44px), tap targets 20px.
 
-const fieldInput = 'w-full text-[15px] px-3 py-2.5 border border-[#ccc] rounded-md bg-white text-[#1a1a1a] outline-none focus:border-[#378ADD] focus:ring-2 focus:ring-[#E6F1FB]';
+const fieldInput = 'w-full text-[15px] px-3 py-2.5 border border-[#ccc] rounded-md bg-white text-[#1a1a1a] outline-none focus:border-[#1A6B7C] focus:ring-2 focus:ring-[rgba(26,107,124,0.12)]';
 const checkItem = 'flex items-center gap-2 text-[14px] text-[#1a1a1a] cursor-pointer';
-const checkbox = 'w-5 h-5 cursor-pointer accent-[#0C447C]';
+const checkbox = 'w-5 h-5 cursor-pointer accent-[#1A6B7C]';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div className="mt-3.5">
-            <div className="bg-[#0C447C] text-[#E6F1FB] text-[14px] font-medium px-3 py-2 rounded-t-lg tracking-[0.02em]">
+            <div className="bg-[#1A6B7C] text-white text-[14px] font-medium px-3 py-2 rounded-t-lg tracking-[0.02em]">
                 {title}
             </div>
             <div className="border border-t-0 border-[#ccc] rounded-b-lg p-3 bg-white space-y-3">
@@ -435,7 +432,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div>
-            <label className="block text-[13px] text-[#0C447C] font-medium mb-1">{label}</label>
+            <label className="block text-[13px] text-[#1A6B7C] font-medium mb-1">{label}</label>
             {children}
         </div>
     );
@@ -453,7 +450,7 @@ function YesNoRow({
 }) {
     return (
         <div className="flex items-center justify-between py-2 border-b border-[#eee]">
-            <label className="text-[13px] text-[#0C447C] font-medium">{label}</label>
+            <label className="text-[13px] text-[#1A6B7C] font-medium">{label}</label>
             <div className="flex gap-5">
                 <label className={checkItem}>
                     <input type="radio" name={name} value="yes" className={checkbox}

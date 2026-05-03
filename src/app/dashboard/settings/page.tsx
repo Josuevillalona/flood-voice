@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, XCircle, AlertCircle, Database, Waves, ShieldAlert, BarChart2, Twitter, Facebook, MessageCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Minus, Database, Waves, Droplets, BarChart2, Twitter, Facebook, MessageCircle } from 'lucide-react';
 
 type ConnectionStatus = 'connected' | 'not_configured' | 'coming_soon';
 
@@ -15,21 +15,27 @@ interface ApiCard {
 
 function StatusBadge({ status }: { status: ConnectionStatus }) {
     if (status === 'connected') return (
-        <span className="flex items-center gap-1 text-xs text-green-400 font-medium">
-            <CheckCircle className="w-3.5 h-3.5" /> Connected
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.06em', color: '#1A6B7C', fontWeight: 600 }}>
+            <CheckCircle2 size={11} /> Connected
         </span>
     );
     if (status === 'not_configured') return (
-        <span className="flex items-center gap-1 text-xs text-yellow-400 font-medium">
-            <AlertCircle className="w-3.5 h-3.5" /> Not Configured
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.06em', color: '#E8A030', fontWeight: 600 }}>
+            <AlertCircle size={11} /> Not Configured
         </span>
     );
     return (
-        <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <XCircle className="w-3.5 h-3.5" /> Coming Soon
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.06em', color: 'rgba(61,79,88,.4)', fontWeight: 600 }}>
+            <Minus size={11} /> Coming Soon
         </span>
     );
 }
+
+const STATUS_BORDER: Record<ConnectionStatus, string> = {
+    connected:      '#1A6B7C',
+    not_configured: '#E8A030',
+    coming_soon:    'rgba(61,79,88,.15)',
+};
 
 const apiSources: ApiCard[] = [
     {
@@ -50,7 +56,7 @@ const apiSources: ApiCard[] = [
         name: 'FEMA Flood Zones',
         description: 'National Flood Hazard Layer (NFHL) GeoJSON for NYC.',
         status: 'coming_soon',
-        icon: ShieldAlert,
+        icon: Droplets,
         note: 'Wiring on Day 2 via /api/fema/zones.',
     },
     {
@@ -87,36 +93,72 @@ const apiSources: ApiCard[] = [
 
 export default function SettingsPage() {
     return (
-        <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold text-white">Settings</h1>
-                <p className="text-slate-400 mt-1">API connections, environment status, and configuration.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+            {/* Header */}
+            <div className="db-ph">
+                <div>
+                    <h1 className="db-ph-title">Settings</h1>
+                    <p className="db-ph-sub">API connections, environment status, and configuration.</p>
+                </div>
             </div>
 
-            {/* API Connection Status */}
-            <div className="space-y-4">
-                <h2 className="text-lg font-semibold text-white">Data Source Connections</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Data source connections */}
+            <div>
+                <div className="db-section-head">
+                    <div className="db-section-dot" />
+                    <span className="db-section-title">Data Source Connections</span>
+                    <span className="db-section-meta">{apiSources.filter(a => a.status === 'connected').length} / {apiSources.length} active</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     {apiSources.map((api) => {
                         const Icon = api.icon;
+                        const borderColor = STATUS_BORDER[api.status];
                         return (
-                            <div key={api.name} className="glass-panel rounded-xl p-5 border border-white/5 flex items-start gap-4">
-                                <div className="p-2 rounded-lg bg-blue-500/10 shrink-0 mt-0.5">
-                                    <Icon className="w-4 h-4 text-blue-400" />
+                            <div key={api.name} style={{
+                                background: '#fff',
+                                borderRadius: '12px',
+                                borderLeft: `3px solid ${borderColor}`,
+                                boxShadow: '0 1px 3px rgba(61,79,88,.06), 0 4px 12px rgba(61,79,88,.06)',
+                                padding: '1rem 1.25rem',
+                                display: 'flex', alignItems: 'flex-start', gap: '12px',
+                            }}>
+                                {/* Icon */}
+                                <div style={{
+                                    width: '34px', height: '34px', borderRadius: '8px', flexShrink: 0,
+                                    background: 'rgba(26,107,124,.08)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    <Icon size={16} style={{ color: '#1A6B7C' }} />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center justify-between gap-2 mb-1">
-                                        <span className="font-medium text-white text-sm">{api.name}</span>
+
+                                {/* Content */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{ fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 700, color: '#3D4F58' }}>
+                                            {api.name}
+                                        </span>
                                         <StatusBadge status={api.status} />
                                     </div>
-                                    <p className="text-xs text-slate-400 leading-relaxed">{api.description}</p>
+                                    <p style={{ fontFamily: 'var(--font-noto)', fontSize: '11px', color: 'rgba(61,79,88,.55)', lineHeight: 1.5, margin: 0 }}>
+                                        {api.description}
+                                    </p>
                                     {api.envVar && (
-                                        <code className="mt-1.5 inline-block text-[10px] text-slate-500 bg-slate-800/60 border border-slate-700/50 rounded px-1.5 py-0.5">
+                                        <code style={{
+                                            display: 'inline-block', marginTop: '6px',
+                                            fontFamily: 'var(--font-plex-mono)', fontSize: '10px',
+                                            color: '#1A6B7C', background: 'rgba(26,107,124,.07)',
+                                            border: '1px solid rgba(26,107,124,.15)',
+                                            borderRadius: '4px', padding: '2px 6px',
+                                        }}>
                                             {api.envVar}
                                         </code>
                                     )}
                                     {api.note && (
-                                        <p className="mt-1 text-[10px] text-slate-500 italic">{api.note}</p>
+                                        <p style={{ fontFamily: 'var(--font-noto)', fontSize: '10px', color: 'rgba(61,79,88,.4)', fontStyle: 'italic', marginTop: '4px', marginBottom: 0 }}>
+                                            {api.note}
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -127,4 +169,3 @@ export default function SettingsPage() {
         </div>
     );
 }
-

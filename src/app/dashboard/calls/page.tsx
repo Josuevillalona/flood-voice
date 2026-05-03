@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CallLogFeed } from '@/components/call-log-feed';
 import { PriorityQueue } from '@/components/analytics';
-import { PhoneCall, AlertTriangle } from 'lucide-react';
+import { PhoneCall, Waves } from 'lucide-react';
 
 export default function CallsPage() {
     const [isCalling, setIsCalling] = useState(false);
@@ -33,45 +33,49 @@ export default function CallsPage() {
     };
 
     return (
-        <div className="space-y-8">
-            {/* Header with Emergency Button */}
-            <div className="flex items-center justify-between">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="db-ph">
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Live Call Feed</h1>
-                    <p className="text-slate-400">Real-time monitoring of all check-in calls and AI analysis.</p>
+                    <h1 className="db-ph-title">Live Call Feed</h1>
+                    <p className="db-ph-sub">Real-time monitoring of all check-in calls and AI analysis.</p>
                 </div>
-
                 <button
                     onClick={handleTrigger}
                     disabled={isCalling}
-                    className="flex items-center gap-2 px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 rounded-lg font-semibold transition-all shadow-[0_0_20px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="db-ph-btn"
+                    style={{
+                        background: '#C4622D',
+                        opacity: isCalling ? 0.6 : 1,
+                        cursor: isCalling ? 'not-allowed' : 'pointer',
+                    }}
                 >
-                    <AlertTriangle className="w-5 h-5" />
+                    <Waves size={14} />
                     {isCalling ? 'Initiating...' : 'Trigger Emergency Check-in'}
                 </button>
             </div>
 
-            {/* Main Content: Priority Queue + Call Feed */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Priority Queue Sidebar */}
-                <div className="lg:col-span-1">
-                    <div className="sticky top-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <AlertTriangle className="w-4 h-4 text-red-400" />
-                            <h2 className="text-sm font-semibold text-white uppercase tracking-wide">Priority Queue</h2>
-                        </div>
-                        <PriorityQueue limit={15} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', alignItems: 'start' }}>
+                <div style={{ position: 'sticky', top: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '1rem' }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#C4622D', animation: 'pulse-teal 2s infinite' }} />
+                        <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(61,79,88,.45)' }}>
+                            Priority Queue
+                        </span>
                     </div>
+                    <PriorityQueue limit={15} />
                 </div>
 
-                {/* Main Feed */}
-                <div className="lg:col-span-2 glass-panel p-6 rounded-xl border border-white/5 min-h-[600px]">
-                    <div className="flex items-center gap-2 mb-6 pb-4 border-b border-white/5">
-                        <PhoneCall className="w-5 h-5 text-blue-400" />
-                        <h2 className="text-lg font-semibold text-white">Incoming Transcripts & Analysis</h2>
+                <div className="db-card">
+                    <div className="db-card-head">
+                        <div className="db-card-title">
+                            <div className="db-card-title-dot" />
+                            <PhoneCall size={13} style={{ color: '#1A6B7C' }} />
+                            Incoming Transcripts & Analysis
+                        </div>
                     </div>
-
-                    <CallLogFeed limit={50} />
+                    <div style={{ padding: '1.25rem' }}>
+                        <CallLogFeed limit={50} />
+                    </div>
                 </div>
             </div>
         </div>

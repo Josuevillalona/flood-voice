@@ -1,9 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
-import { AlertTriangle, AlertCircle, Minus, CheckCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 type UrgencyData = {
     urgencyBreakdown: {
@@ -19,12 +16,22 @@ type UrgencyData = {
     };
 };
 
-const urgencyConfig = [
-    { key: 'critical', label: 'Critical', color: 'bg-red-500', icon: AlertTriangle, textColor: 'text-red-400' },
-    { key: 'elevated', label: 'Elevated', color: 'bg-orange-500', icon: AlertCircle, textColor: 'text-orange-400' },
-    { key: 'moderate', label: 'Moderate', color: 'bg-yellow-500', icon: Minus, textColor: 'text-yellow-400' },
-    { key: 'stable', label: 'Stable', color: 'bg-green-500', icon: CheckCircle, textColor: 'text-green-400' },
+const URGENCY = [
+    { key: 'critical',  label: 'Critical',  color: '#C4622D' },
+    { key: 'elevated',  label: 'Elevated',  color: '#E8A030' },
+    { key: 'moderate',  label: 'Moderate',  color: 'rgba(232,160,48,.45)' },
+    { key: 'stable',    label: 'Stable',    color: '#1A6B7C' },
 ] as const;
+
+const scoreColor = (s: number) =>
+    s >= 7 ? '#C4622D' : s >= 5 ? '#E8A030' : s >= 3 ? 'rgba(232,160,48,.7)' : '#1A6B7C';
+
+const CARD: React.CSSProperties = {
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '1rem 1.25rem',
+    boxShadow: '0 1px 3px rgba(61,79,88,.06), 0 4px 12px rgba(61,79,88,.06)',
+};
 
 export function UrgencyBreakdown() {
     const [data, setData] = useState<UrgencyData | null>(null);
@@ -33,11 +40,10 @@ export function UrgencyBreakdown() {
     const fetchData = useCallback(async () => {
         try {
             const res = await fetch('/api/analytics/priority');
-            if (!res.ok) throw new Error('Failed to fetch');
-            const json = await res.json();
-            setData(json);
+            if (!res.ok) throw new Error('Failed');
+            setData(await res.json());
         } catch (err) {
-            console.error('UrgencyBreakdown fetch error:', err);
+            console.error('UrgencyBreakdown:', err);
         } finally {
             setIsLoading(false);
         }
@@ -45,18 +51,16 @@ export function UrgencyBreakdown() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 30000);
-        return () => clearInterval(interval);
+        const id = setInterval(fetchData, 30000);
+        return () => clearInterval(id);
     }, [fetchData]);
 
     if (isLoading) {
         return (
-            <Card className="bg-slate-900/80 border-slate-800 p-4">
-                <div className="animate-pulse">
-                    <div className="h-4 bg-slate-700 rounded w-1/2 mb-4"></div>
-                    <div className="h-6 bg-slate-800 rounded-full"></div>
-                </div>
-            </Card>
+            <div style={CARD}>
+                <div style={{ height: '8px', background: 'rgba(61,79,88,.08)', borderRadius: '4px', marginBottom: '1rem', width: '55%' }} />
+                <div style={{ height: '28px', background: 'rgba(61,79,88,.06)', borderRadius: '20px' }} />
+            </div>
         );
     }
 
@@ -64,62 +68,64 @@ export function UrgencyBreakdown() {
     const total = Object.values(breakdown).reduce((a, b) => a + b, 0);
 
     return (
-        <Card className="bg-slate-900/80 border-slate-800 p-4">
-            <h4 className="text-sm font-semibold text-white mb-4">Urgency Distribution</h4>
+        <div style={CARD}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <span style={{ fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 700, color: '#3D4F58' }}>
+                    Urgency Distribution
+                </span>
+                {data?.summary && (
+                    <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.35)', letterSpacing: '.06em' }}>
+                        {data.summary.analyzedCalls} calls
+                    </span>
+                )}
+            </div>
 
-            {/* Stacked Bar */}
+            {/* Stacked bar */}
             {total > 0 ? (
-                <div className="h-8 rounded-full overflow-hidden flex bg-slate-800">
-                    {urgencyConfig.map(({ key, color }) => {
-                        const value = breakdown[key as keyof typeof breakdown];
-                        const pct = total > 0 ? (value / total) * 100 : 0;
+                <div style={{ height: '24px', borderRadius: '20px', overflow: 'hidden', display: 'flex', background: 'rgba(61,79,88,.06)', marginBottom: '1rem' }}>
+                    {URGENCY.map(({ key, color }) => {
+                        const val = breakdown[key as keyof typeof breakdown];
+                        const pct = (val / total) * 100;
                         if (pct === 0) return null;
                         return (
-                            <div
-                                key={key}
-                                className={cn("h-full transition-all duration-500", color)}
-                                style={{ width: `${pct}%` }}
-                                title={`${key}: ${value}`}
-                            />
+                            <div key={key} style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .5s' }}
+                                title={`${key}: ${val}`} />
                         );
                     })}
                 </div>
             ) : (
-                <div className="h-8 rounded-full bg-slate-800 flex items-center justify-center">
-                    <span className="text-xs text-slate-500">No data yet</span>
+                <div style={{ height: '24px', borderRadius: '20px', background: 'rgba(61,79,88,.06)', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.3)', letterSpacing: '.06em' }}>NO DATA YET</span>
                 </div>
             )}
 
             {/* Legend */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
-                {urgencyConfig.map(({ key, label, color, icon: Icon, textColor }) => {
-                    const value = breakdown[key as keyof typeof breakdown];
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem' }}>
+                {URGENCY.map(({ key, label, color }) => {
+                    const val = breakdown[key as keyof typeof breakdown];
                     return (
-                        <div key={key} className="flex items-center gap-2">
-                            <div className={cn("w-3 h-3 rounded-sm", color)} />
-                            <span className="text-xs text-slate-400">{label}</span>
-                            <span className={cn("text-xs font-bold ml-auto", textColor)}>
-                                {value}
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: color, flexShrink: 0 }} />
+                            <span style={{ fontFamily: 'var(--font-noto)', fontSize: '11px', color: 'rgba(61,79,88,.55)', flex: 1 }}>{label}</span>
+                            <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', fontWeight: 500, color }}>
+                                {val}
                             </span>
                         </div>
                     );
                 })}
             </div>
 
-            {/* Average Score */}
+            {/* Avg score */}
             {data?.summary && (
-                <div className="mt-4 pt-3 border-t border-slate-800 flex justify-between items-center">
-                    <span className="text-xs text-slate-500">Avg Distress Score</span>
-                    <span className={cn(
-                        "text-lg font-bold",
-                        data.summary.avgScore >= 7 ? "text-red-400" :
-                            data.summary.avgScore >= 5 ? "text-orange-400" :
-                                data.summary.avgScore >= 3 ? "text-yellow-400" : "text-green-400"
-                    )}>
+                <div style={{ marginTop: '.875rem', paddingTop: '.75rem', borderTop: '1px solid rgba(61,79,88,.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.4)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                        Avg Distress Score
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-jakarta)', fontSize: '1.1rem', fontWeight: 800, color: scoreColor(data.summary.avgScore), letterSpacing: '-.03em' }}>
                         {data.summary.avgScore}/10
                     </span>
                 </div>
             )}
-        </Card>
+        </div>
     );
 }

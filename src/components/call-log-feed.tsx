@@ -2,12 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Play, FileText, Activity, Zap, Droplets, Utensils, Home, Brain, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 
 type CallLog = {
     id: string;
@@ -17,32 +13,36 @@ type CallLog = {
     summary: string;
     resident_id: string;
     resident: { name: string };
-    // New Fields
     tags: string[];
     sentiment_score: number;
     key_topics: string;
 };
 
-// Map Tags to Colors & Icons - Compact version
-const getTagConfig = (tag: string) => {
-    switch (tag) {
-        case 'Medical': return { color: 'bg-red-500/30 text-red-400', icon: Activity, short: 'Med' };
-        case 'Food/Water': return { color: 'bg-orange-500/30 text-orange-400', icon: Utensils, short: 'Food' };
-        case 'Power': return { color: 'bg-yellow-500/30 text-yellow-400', icon: Zap, short: 'Pwr' };
-        case 'Evacuation': return { color: 'bg-purple-500/30 text-purple-400', icon: Home, short: 'Evac' };
-        case 'Mental Health': return { color: 'bg-pink-500/30 text-pink-400', icon: Brain, short: 'MH' };
-        case 'Property Damage': return { color: 'bg-blue-500/30 text-blue-400', icon: Droplets, short: 'Prop' };
-        case 'Safe': return { color: 'bg-green-500/30 text-green-400', icon: FileText, short: 'Safe' };
-        default: return { color: 'bg-slate-700/50 text-slate-400', icon: FileText, short: tag.slice(0, 4) };
-    }
+type TagConfig = {
+    color: string;
+    bg: string;
+    icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+    short: string;
 };
 
-// Get border and badge colors based on score
-const getPriorityColors = (score: number) => {
-    if (score >= 8) return { border: 'border-l-red-500', badge: 'bg-red-500 text-white', pulse: true };
-    if (score >= 6) return { border: 'border-l-orange-500', badge: 'bg-orange-500 text-white', pulse: false };
-    if (score >= 4) return { border: 'border-l-yellow-500', badge: 'bg-yellow-500 text-black', pulse: false };
-    return { border: 'border-l-green-500', badge: 'bg-green-600 text-white', pulse: false };
+const TAG_CFG: Record<string, TagConfig> = {
+    'Medical':         { color: '#C4622D',             bg: 'rgba(196,98,45,.12)',  icon: Activity, short: 'Med'  },
+    'Evacuation':      { color: '#C4622D',             bg: 'rgba(196,98,45,.12)',  icon: Home,     short: 'Evac' },
+    'Mental Health':   { color: 'rgba(196,98,45,.8)',  bg: 'rgba(196,98,45,.08)', icon: Brain,    short: 'MH'   },
+    'Food/Water':      { color: '#1A6B7C',             bg: 'rgba(26,107,124,.1)',  icon: Utensils, short: 'Food' },
+    'Power':           { color: '#E8A030',             bg: 'rgba(232,160,48,.12)', icon: Zap,      short: 'Pwr'  },
+    'Property Damage': { color: '#E8A030',             bg: 'rgba(232,160,48,.12)', icon: Droplets, short: 'Prop' },
+    'Safe':            { color: '#1A6B7C',             bg: 'rgba(26,107,124,.1)',  icon: FileText, short: 'Safe' },
+};
+
+const getTagConfig = (tag: string): TagConfig =>
+    TAG_CFG[tag] ?? { color: 'rgba(61,79,88,.5)', bg: 'rgba(61,79,88,.07)', icon: FileText, short: tag.slice(0, 4) };
+
+const scoreStyle = (score: number) => {
+    if (score >= 8) return { borderColor: '#C4622D',              badgeBg: '#C4622D',              badgeColor: '#fff',    pulse: true  };
+    if (score >= 6) return { borderColor: '#E8A030',              badgeBg: '#E8A030',              badgeColor: '#fff',    pulse: false };
+    if (score >= 4) return { borderColor: 'rgba(232,160,48,.5)',  badgeBg: 'rgba(232,160,48,.15)', badgeColor: '#E8A030', pulse: false };
+    return              { borderColor: '#1A6B7C',              badgeBg: 'rgba(26,107,124,.1)',  badgeColor: '#1A6B7C', pulse: false };
 };
 
 export function CallLogFeed({ limit = 10 }: { limit?: number }) {
@@ -53,117 +53,102 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
     const fetchLogs = useCallback(async () => {
         const { data } = await supabase
             .from('call_logs')
-            .select(`
-                    id, created_at, recording_url, transcript, summary, resident_id, tags, sentiment_score, key_topics,
-                    resident:residents(name)
-                `)
+            .select('id, created_at, recording_url, transcript, summary, resident_id, tags, sentiment_score, key_topics, resident:residents(name)')
             .order('created_at', { ascending: false })
             .limit(limit);
 
-        if (data) setLogs(data as any[]);
+        if (data) setLogs(data as unknown as CallLog[]);
         setIsLoading(false);
     }, [limit]);
 
     useEffect(() => {
         fetchLogs();
-
-        // Subscribe to real-time changes
         const subscription = supabase
             .channel('call_logs_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'call_logs' },
-                (payload) => {
-                    console.log('Call Log Updated:', payload);
-                    fetchLogs(); // Refresh on Insert OR Update
-                }
-            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'call_logs' }, () => fetchLogs())
             .subscribe();
-
         return () => { subscription.unsubscribe(); };
     }, [fetchLogs]);
 
-    const toggleExpand = (id: string) => {
-        setExpandedId(expandedId === id ? null : id);
-    };
+    if (isLoading) return (
+        <p style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', color: 'rgba(61,79,88,.35)', letterSpacing: '.06em' }}>
+            Scanning feed...
+        </p>
+    );
 
-    if (isLoading) return <div className="text-slate-500 text-sm animate-pulse">Scanning feed...</div>;
-
-    if (logs.length === 0) return <div className="text-slate-500 text-sm">No recent calls recorded.</div>;
+    if (logs.length === 0) return (
+        <p style={{ fontFamily: 'var(--font-noto)', fontSize: '13px', color: 'rgba(61,79,88,.4)', textAlign: 'center', padding: '2rem 0' }}>
+            No recent calls recorded.
+        </p>
+    );
 
     return (
-        <div className="space-y-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {logs.map((log) => {
                 const score = log.sentiment_score ?? 0;
-                const priority = getPriorityColors(score);
+                const s = scoreStyle(score);
                 const isExpanded = expandedId === log.id;
 
                 return (
-                    <Card
+                    <div
                         key={log.id}
-                        className={cn(
-                            "bg-slate-900/80 border-slate-800 overflow-hidden transition-all duration-200 cursor-pointer hover:bg-slate-800/60",
-                            score > 0 && `border-l-4 ${priority.border}`
-                        )}
-                        onClick={() => toggleExpand(log.id)}
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        style={{
+                            background: '#fff',
+                            borderRadius: '8px',
+                            borderLeft: `3px solid ${score > 0 ? s.borderColor : 'rgba(61,79,88,.1)'}`,
+                            boxShadow: '0 1px 3px rgba(61,79,88,.06)',
+                            cursor: 'pointer',
+                            overflow: 'hidden',
+                        }}
                     >
-                        {/* Compact Card View */}
-                        <div className="px-3 py-2.5">
-                            {/* Row 1: Name + Time | Score */}
-                            <div className="flex items-center justify-between gap-2">
-                                {/* Left: Name + Time */}
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="font-semibold text-white text-sm truncate">
+                        {/* Compact row */}
+                        <div style={{ padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                    <span style={{ fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 600, color: '#3D4F58', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {log.resident?.name || 'Unknown'}
                                     </span>
-                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                                    <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.4)', whiteSpace: 'nowrap' }}>
                                         {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
                                     </span>
                                 </div>
-
-                                {/* Right: Score Badge + Expand */}
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                     {score > 0 && (
-                                        <span className={cn(
-                                            "text-xs font-bold px-2.5 py-0.5 rounded-full min-w-[32px] text-center",
-                                            priority.badge,
-                                            priority.pulse && "animate-pulse"
-                                        )}>
+                                        <span style={{
+                                            fontFamily: 'var(--font-plex-mono)', fontSize: '11px', fontWeight: 700,
+                                            padding: '2px 8px', borderRadius: '12px',
+                                            background: s.badgeBg, color: s.badgeColor,
+                                            animation: s.pulse ? 'pulse-teal 2s infinite' : 'none',
+                                        }}>
                                             {score}
                                         </span>
                                     )}
-                                    <ChevronDown className={cn(
-                                        "w-4 h-4 text-slate-500 transition-transform",
-                                        isExpanded && "rotate-180"
-                                    )} />
+                                    <ChevronDown size={14} style={{ color: 'rgba(61,79,88,.35)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
                                 </div>
                             </div>
 
-                            {/* Row 2: Summary + Tags */}
                             {(log.key_topics || (log.tags && log.tags.length > 0)) && (
-                                <div className="mt-2 space-y-1.5">
-                                    {/* Summary */}
+                                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     {log.key_topics && (
-                                        <p className="text-xs text-slate-400 line-clamp-1 italic">
-                                            "{log.key_topics}"
+                                        <p style={{ fontFamily: 'var(--font-noto)', fontSize: '11px', color: 'rgba(61,79,88,.5)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                                            &ldquo;{log.key_topics}&rdquo;
                                         </p>
                                     )}
-
-                                    {/* Tags Row */}
                                     {log.tags && log.tags.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                             {log.tags.map(tag => {
-                                                const config = getTagConfig(tag);
-                                                const Icon = config.icon;
+                                                const cfg = getTagConfig(tag);
+                                                const Icon = cfg.icon;
                                                 return (
-                                                    <span
-                                                        key={tag}
-                                                        className={cn(
-                                                            "text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1",
-                                                            config.color
-                                                        )}
-                                                        title={tag}
-                                                    >
-                                                        <Icon className="w-3 h-3" />
-                                                        {config.short}
+                                                    <span key={tag} style={{
+                                                        fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.04em',
+                                                        padding: '2px 8px', borderRadius: '10px',
+                                                        background: cfg.bg, color: cfg.color,
+                                                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                                    }} title={tag}>
+                                                        <Icon size={10} />
+                                                        {cfg.short}
                                                     </span>
                                                 );
                                             })}
@@ -173,89 +158,67 @@ export function CallLogFeed({ limit = 10 }: { limit?: number }) {
                             )}
                         </div>
 
-                        {/* Expanded Detail View: Audio & Full Transcript */}
-                        {expandedId === log.id && (
-                            <div className="border-t border-slate-800 bg-slate-950 p-4 animate-in slide-in-from-top-2 duration-200">
-                                {/* Audio Player */}
+                        {/* Expanded panel */}
+                        {isExpanded && (
+                            <div onClick={(e) => e.stopPropagation()} style={{ borderTop: '1px solid rgba(61,79,88,.07)', background: 'rgba(61,79,88,.02)', padding: '1rem' }}>
                                 {log.recording_url && (
-                                    <div className="mb-4">
-                                        <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
-                                            <Play className="w-3 h-3" /> Call Recording
-                                        </h4>
-                                        <audio controls className="w-full h-8 rounded bg-slate-900" src={log.recording_url} />
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <div style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(61,79,88,.4)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <Play size={9} /> Call Recording
+                                        </div>
+                                        <audio controls style={{ width: '100%', height: '32px' }} src={log.recording_url} />
                                     </div>
                                 )}
-
-                                {/* Full Transcript */}
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-2">
-                                        <FileText className="w-3 h-3" /> Full Transcript
-                                    </h4>
-                                    <div className="text-sm text-slate-300 leading-relaxed p-3 bg-slate-900 rounded-md max-h-60 overflow-y-auto font-mono">
-                                        {log.transcript || "Transcript not available."}
+                                    <div style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(61,79,88,.4)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <FileText size={9} /> Full Transcript
+                                    </div>
+                                    <div style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', color: '#3D4F58', lineHeight: 1.7, padding: '.75rem', background: 'rgba(61,79,88,.03)', borderRadius: '6px', maxHeight: '240px', overflowY: 'auto', border: '1px solid rgba(61,79,88,.06)' }}>
+                                        {log.transcript || 'Transcript not available.'}
                                     </div>
                                 </div>
-
-                                {/* Manual Re-Analyze Button (Debug) */}
                                 {(!log.sentiment_score || log.sentiment_score === 0) && (
-                                    <div className="mt-4 pt-4 border-t border-slate-900 flex justify-end">
-                                        <Button size="sm" variant="secondary"
-                                            className="text-xs h-7"
+                                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(61,79,88,.07)', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <button
+                                            style={{ fontFamily: 'var(--font-jakarta)', fontSize: '11px', fontWeight: 600, padding: '4px 12px', background: 'rgba(26,107,124,.1)', color: '#1A6B7C', border: '1px solid rgba(26,107,124,.2)', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                             onClick={async (e) => {
                                                 e.stopPropagation();
                                                 const btn = e.currentTarget;
                                                 btn.disabled = true;
-                                                const originalText = btn.textContent;
-                                                btn.textContent = "Analyzing...";
-
+                                                const orig = btn.textContent;
+                                                btn.textContent = 'Analyzing...';
                                                 try {
-                                                    console.log(`Starting analysis for call: ${log.id}`);
                                                     const response = await fetch('/api/analyze-call', {
                                                         method: 'POST',
-                                                        headers: {
-                                                            'Content-Type': 'application/json',
-                                                        },
-                                                        body: JSON.stringify({ callId: log.id })
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ callId: log.id }),
                                                     });
-
                                                     const result = await response.json();
-                                                    console.log('Analysis API Response:', result);
-
-                                                    if (!response.ok) {
-                                                        throw new Error(result.error || 'Analysis failed');
-                                                    }
-
-                                                    // Directly update local state with the analysis results
+                                                    if (!response.ok) throw new Error(result.error || 'Analysis failed');
                                                     if (result.success && result.analysis) {
-                                                        setLogs(prevLogs => prevLogs.map(l =>
+                                                        setLogs(prev => prev.map(l =>
                                                             l.id === log.id
-                                                                ? {
-                                                                    ...l,
-                                                                    tags: result.analysis.tags,
-                                                                    sentiment_score: result.analysis.sentiment_score,
-                                                                    key_topics: result.analysis.key_topics
-                                                                }
+                                                                ? { ...l, tags: result.analysis.tags, sentiment_score: result.analysis.sentiment_score, key_topics: result.analysis.key_topics }
                                                                 : l
                                                         ));
-                                                        console.log('Local state updated with analysis:', result.analysis);
                                                     }
-                                                } catch (err: any) {
-                                                    console.error('Analysis Error:', err);
-                                                    alert(`Analysis Failed: ${err.message}`);
+                                                } catch (err: unknown) {
+                                                    const msg = err instanceof Error ? err.message : 'Unknown error';
+                                                    alert(`Analysis Failed: ${msg}`);
                                                 } finally {
                                                     btn.disabled = false;
-                                                    btn.textContent = originalText;
+                                                    btn.textContent = orig;
                                                 }
                                             }}
                                         >
-                                            <Brain className="w-3 h-3 mr-2" />
+                                            <Brain size={11} />
                                             Analyze with Gemini
-                                        </Button>
+                                        </button>
                                     </div>
                                 )}
                             </div>
                         )}
-                    </Card>
+                    </div>
                 );
             })}
         </div>

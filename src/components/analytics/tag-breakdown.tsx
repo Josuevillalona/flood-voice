@@ -1,32 +1,28 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
-import { Activity, Utensils, Zap, Home, Brain, Droplets, FileText, ShieldCheck } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Activity, Utensils, Zap, Home, Brain, Droplets, FileText, CheckCircle2 } from 'lucide-react';
 
-type TagData = {
-    tag: string;
-    count: number;
-    percentage: number;
+type TagData = { tag: string; count: number; percentage: number };
+type ApiResponse = { tagDistribution: TagData[] };
+
+const TAG_CFG: Record<string, { color: string; icon: React.ElementType }> = {
+    'Medical':          { color: '#C4622D', icon: Activity },
+    'Evacuation':       { color: '#C4622D', icon: Home },
+    'Mental Health':    { color: 'rgba(196,98,45,.65)', icon: Brain },
+    'Food/Water':       { color: '#1A6B7C', icon: Utensils },
+    'Power':            { color: '#E8A030', icon: Zap },
+    'Property Damage':  { color: '#E8A030', icon: Droplets },
+    'Safe':             { color: '#1A6B7C', icon: CheckCircle2 },
 };
+const DEFAULT_CFG = { color: '#3D4F58', icon: FileText };
 
-type ApiResponse = {
-    tagDistribution: TagData[];
+const CARD: React.CSSProperties = {
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '1rem 1.25rem',
+    boxShadow: '0 1px 3px rgba(61,79,88,.06), 0 4px 12px rgba(61,79,88,.06)',
 };
-
-// Match colors from call-log-feed.tsx
-const tagConfig: Record<string, { color: string; bgColor: string; icon: React.ElementType }> = {
-    'Medical': { color: 'text-red-400', bgColor: 'bg-red-500', icon: Activity },
-    'Food/Water': { color: 'text-orange-400', bgColor: 'bg-orange-500', icon: Utensils },
-    'Power': { color: 'text-yellow-400', bgColor: 'bg-yellow-500', icon: Zap },
-    'Evacuation': { color: 'text-purple-400', bgColor: 'bg-purple-500', icon: Home },
-    'Mental Health': { color: 'text-pink-400', bgColor: 'bg-pink-500', icon: Brain },
-    'Property Damage': { color: 'text-blue-400', bgColor: 'bg-blue-500', icon: Droplets },
-    'Safe': { color: 'text-green-400', bgColor: 'bg-green-500', icon: ShieldCheck },
-};
-
-const defaultConfig = { color: 'text-slate-400', bgColor: 'bg-slate-500', icon: FileText };
 
 export function TagBreakdown() {
     const [tags, setTags] = useState<TagData[]>([]);
@@ -35,11 +31,11 @@ export function TagBreakdown() {
     const fetchData = useCallback(async () => {
         try {
             const res = await fetch('/api/analytics/priority');
-            if (!res.ok) throw new Error('Failed to fetch');
+            if (!res.ok) throw new Error('Failed');
             const json: ApiResponse = await res.json();
             setTags(json.tagDistribution || []);
         } catch (err) {
-            console.error('TagBreakdown fetch error:', err);
+            console.error('TagBreakdown:', err);
         } finally {
             setIsLoading(false);
         }
@@ -47,62 +43,57 @@ export function TagBreakdown() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 30000);
-        return () => clearInterval(interval);
+        const id = setInterval(fetchData, 30000);
+        return () => clearInterval(id);
     }, [fetchData]);
 
     if (isLoading) {
         return (
-            <Card className="bg-slate-900/80 border-slate-800 p-4">
-                <div className="animate-pulse">
-                    <div className="h-4 bg-slate-700 rounded w-1/2 mb-4"></div>
-                    <div className="space-y-2">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="h-6 bg-slate-800 rounded"></div>
-                        ))}
-                    </div>
-                </div>
-            </Card>
+            <div style={CARD}>
+                <div style={{ height: '8px', background: 'rgba(61,79,88,.08)', borderRadius: '4px', marginBottom: '1rem', width: '45%' }} />
+                {[1, 2, 3].map(i => (
+                    <div key={i} style={{ height: '20px', background: 'rgba(61,79,88,.06)', borderRadius: '4px', marginBottom: '.5rem' }} />
+                ))}
+            </div>
         );
     }
 
     const maxCount = Math.max(...tags.map(t => t.count), 1);
 
     return (
-        <Card className="bg-slate-900/80 border-slate-800 p-4">
-            <h4 className="text-sm font-semibold text-white mb-4">Top Concerns</h4>
+        <div style={CARD}>
+            <div style={{ fontFamily: 'var(--font-jakarta)', fontSize: '13px', fontWeight: 700, color: '#3D4F58', marginBottom: '1rem' }}>
+                Top Concerns
+            </div>
 
             {tags.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-4">No tags recorded yet</p>
+                <p style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '9px', color: 'rgba(61,79,88,.3)', textAlign: 'center', padding: '1rem 0', letterSpacing: '.06em' }}>
+                    NO TAGS RECORDED YET
+                </p>
             ) : (
-                <div className="space-y-3">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
                     {tags.slice(0, 6).map((tag) => {
-                        const config = tagConfig[tag.tag] || defaultConfig;
-                        const Icon = config.icon;
+                        const cfg = TAG_CFG[tag.tag] || DEFAULT_CFG;
+                        const Icon = cfg.icon;
                         const widthPct = (tag.count / maxCount) * 100;
 
                         return (
-                            <div key={tag.tag} className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Icon className={cn("w-3.5 h-3.5", config.color)} />
-                                        <span className="text-xs text-slate-300">{tag.tag}</span>
+                            <div key={tag.tag}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.25rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                                        <Icon size={12} style={{ color: cfg.color, flexShrink: 0 }} />
+                                        <span style={{ fontFamily: 'var(--font-noto)', fontSize: '12px', color: '#3D4F58' }}>{tag.tag}</span>
                                     </div>
-                                    <span className={cn("text-xs font-bold", config.color)}>
-                                        {tag.count}
-                                    </span>
+                                    <span style={{ fontFamily: 'var(--font-plex-mono)', fontSize: '11px', fontWeight: 500, color: cfg.color }}>{tag.count}</span>
                                 </div>
-                                <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                                    <div
-                                        className={cn("h-full rounded-full transition-all duration-500", config.bgColor)}
-                                        style={{ width: `${widthPct}%`, opacity: 0.7 }}
-                                    />
+                                <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(61,79,88,.07)', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', borderRadius: '2px', background: cfg.color, width: `${widthPct}%`, opacity: 0.75, transition: 'width .5s' }} />
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             )}
-        </Card>
+        </div>
     );
 }

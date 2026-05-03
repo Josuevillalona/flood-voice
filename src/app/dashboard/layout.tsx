@@ -3,90 +3,96 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Brain, Settings, LogOut, Phone, Sun, Moon, ClipboardList } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { LayoutDashboard, Users, Brain, Settings, LogOut, Phone, ClipboardList } from 'lucide-react';
+import Image from 'next/image';
 import { FloodingProvider } from '@/contexts/flooding-context';
-import { useTheme } from '@/contexts/theme-context';
+import './dashboard.css';
+
+const navItems = [
+    { name: 'Command Center', href: '/dashboard',                icon: LayoutDashboard },
+    { name: 'Live Calls',     href: '/dashboard/calls',          icon: Phone },
+    { name: 'Residents Pod',  href: '/dashboard/residents',      icon: Users },
+    { name: 'Intake Form',    href: '/dashboard/intake',         icon: ClipboardList },
+    { name: 'Flood Intel',    href: '/dashboard/intelligence',   icon: Brain },
+    { name: 'Settings',       href: '/dashboard/settings',       icon: Settings },
+];
+
+function Sidebar() {
+    const pathname = usePathname();
+
+    return (
+        <aside className="db-sidebar">
+            <div className="db-sidebar-logo">
+                <Image src="/logo-white.png" alt="FloodVoice" width={110} height={62} priority />
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+                <div className="db-sidebar-section">Operations</div>
+                <div className="db-sidebar-nav">
+                    {navItems.slice(0, 3).map(item => {
+                        const Icon = item.icon;
+                        return (
+                            <Link key={item.href} href={item.href}
+                                className={`db-nav-item${pathname === item.href ? ' active' : ''}`}>
+                                <Icon size={14} strokeWidth={1.75} />
+                                {item.name}
+                            </Link>
+                        );
+                    })}
+                </div>
+
+                <div className="db-sidebar-section">Intelligence</div>
+                <div className="db-sidebar-nav">
+                    {navItems.slice(3).map(item => {
+                        const Icon = item.icon;
+                        return (
+                            <Link key={item.href} href={item.href}
+                                className={`db-nav-item${pathname === item.href ? ' active' : ''}`}>
+                                <Icon size={14} strokeWidth={1.75} />
+                                {item.name}
+                            </Link>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="db-sidebar-foot">
+                <div className="db-sidebar-user">
+                    <div className="db-sidebar-avatar">FV</div>
+                    <div>
+                        <div className="db-sidebar-uname">Liaison</div>
+                        <div className="db-sidebar-urole">FloodVoice NYC</div>
+                    </div>
+                </div>
+                <button className="db-nav-item" style={{ marginTop: '2px' }}>
+                    <LogOut size={14} strokeWidth={1.75} />
+                    Sign Out
+                </button>
+            </div>
+        </aside>
+    );
+}
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
     const pathname = usePathname();
-    const { theme, toggleTheme } = useTheme();
-
-    const navItems = [
-        { name: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
-        { name: 'Live Calls', href: '/dashboard/calls', icon: Phone },
-        { name: 'Residents Pod', href: '/dashboard/residents', icon: Users },
-        { name: 'Intake Form', href: '/dashboard/intake', icon: ClipboardList },
-        { name: 'Flood Intelligence', href: '/dashboard/intelligence', icon: Brain },
-        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-    ];
+    const currentPage = navItems.find(i => i.href === pathname)?.name ?? 'Dashboard';
 
     return (
         <FloodingProvider>
-            <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] flex">
-                {/* Sidebar - Glassmorphism */}
-                <aside className="w-64 fixed h-full glass-panel border-r border-white/5 z-50 flex flex-col">
-                    {/* Logo */}
-                    <div className="p-6 border-b border-white/5">
-                        <h2 className="text-2xl font-bold tracking-tighter">
-                            Flood<span className="text-blue-400">Voice</span>
-                        </h2>
+            <div className="db-shell">
+                <Sidebar />
+                <div className="db-main">
+                    <div className="db-topbar">
+                        <div className="db-breadcrumb">
+                            <span>FloodVoice</span>
+                            <span>/</span>
+                            <span className="db-breadcrumb-active">{currentPage}</span>
+                        </div>
                     </div>
-
-                    {/* Nav Links */}
-                    <nav className="flex-1 p-4 space-y-2">
-                        {navItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = pathname === item.href;
-
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
-                                        isActive
-                                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                            : "text-slate-400 hover:text-white hover:bg-white/5"
-                                    )}
-                                >
-                                    <Icon className="w-5 h-5" />
-                                    {item.name}
-                                </Link>
-                            );
-                        })}
-                    </nav>
-
-                    {/* Theme toggle + Sign Out */}
-                    <div className="p-4 border-t border-white/5 space-y-1">
-                        <button
-                            onClick={toggleTheme}
-                            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                            className="flex items-center gap-3 w-full px-4 py-3 text-sm text-slate-400 hover:text-blue-400 transition-colors rounded-lg hover:bg-white/5"
-                        >
-                            {theme === 'dark' ? (
-                                <Sun className="w-5 h-5" />
-                            ) : (
-                                <Moon className="w-5 h-5" />
-                            )}
-                            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                        </button>
-                        <button className="flex items-center gap-3 w-full px-4 py-3 text-sm text-slate-400 hover:text-red-400 transition-colors rounded-lg hover:bg-white/5">
-                            <LogOut className="w-5 h-5" />
-                            Sign Out
-                        </button>
-                    </div>
-                </aside>
-
-                {/* Main Content Area */}
-                <main className="flex-1 ml-64 p-6 relative">
-                    {/* ambient background glow */}
-                    <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-blue-900/10 to-transparent pointer-events-none" />
-
-                    <div className="relative z-10">
+                    <div className="db-body">
                         {children}
                     </div>
-                </main>
+                </div>
             </div>
         </FloodingProvider>
     );
