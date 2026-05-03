@@ -83,6 +83,8 @@ export function FloodMap({ className }: { className?: string }) {
     // Council Districts layer toggle
     const [showCouncilDistricts, setShowCouncilDistricts] = useState(false);
     const [councilLoading, setCouncilLoading] = useState(false);
+    // True when polygons rendered but flood-count fetch failed — drives D10 notice.
+    const [councilCountsUnavailable, setCouncilCountsUnavailable] = useState(false);
 
     // NYC center coordinates
     const NYC_CENTER: [number, number] = [-73.935242, 40.730610];
@@ -409,14 +411,17 @@ export function FloodMap({ className }: { className?: string }) {
     }, [showFemaZones, mapLoaded]);
 
     // Council Districts layer — add/remove based on toggle. Mirrors the FEMA pattern (load on first toggle-on, leave the source in place across off/on cycles within a session, so reopening doesn't refetch).
+    // Phase 2: also fetches per-district 30-day flood-event counts and merges them into the GeoJSON properties before adding the source. The fill is graded by relative count (lightest=lowest, darkest=highest), and a `symbol` layer renders "District N — count" labels above zoom 11.
     useEffect(() => {
         if (!map.current || !mapLoaded) return;
 
         const COUNCIL_SOURCE = 'council-districts';
         const COUNCIL_FILL = 'council-districts-fill';
         const COUNCIL_OUTLINE = 'council-districts-outline';
+        const COUNCIL_LABEL = 'council-districts-label';
 
         const removeCouncilLayers = () => {
+            if (map.current!.getLayer(COUNCIL_LABEL)) map.current!.removeLayer(COUNCIL_LABEL);
             if (map.current!.getLayer(COUNCIL_OUTLINE)) map.current!.removeLayer(COUNCIL_OUTLINE);
             if (map.current!.getLayer(COUNCIL_FILL)) map.current!.removeLayer(COUNCIL_FILL);
             if (map.current!.getSource(COUNCIL_SOURCE)) map.current!.removeSource(COUNCIL_SOURCE);
@@ -424,32 +429,70 @@ export function FloodMap({ className }: { className?: string }) {
 
         if (!showCouncilDistricts) {
             removeCouncilLayers();
+            setCouncilCountsUnavailable(false);
             return;
         }
 
         if (map.current.getSource(COUNCIL_SOURCE)) return;
 
         setCouncilLoading(true);
-        fetch('/api/council-districts')
-            .then(r => r.json())
-            .then(geojson => {
+        // Fetch polygons + counts in parallel. Counts can fail independently (D10) — districts still render, just without the gradient and with a "data unavailable" notice.
+        Promise.all([
+            fetch('/api/council-districts').then(r => r.json()),
+            fetch('/api/council-districts/flood-counts').then(r => r.ok ? r.json() : Promise.reject(r.statusText)).catch(() => null),
+        ])
+            .then(([geojson, countsResp]) => {
                 if (!map.current || map.current.getSource(COUNCIL_SOURCE)) return;
-                map.current.addSource(COUNCIL_SOURCE, { type: 'geojson', data: geojson });
+                if (geojson?.type !== 'FeatureCollection') {
+                    throw new Error(`Expected GeoJSON FeatureCollection, got: ${JSON.stringify(geojson).slice(0, 200)}`);
+                }
 
-                // Amber palette so it doesn't collide with FEMA's red/blue/purple when both are on.
-                // Fill is faint (0.10) — districts are administrative context, not the focus; outline carries the visual weight.
-                // Both fill and outline get a subtle zoom interpolation so the layer reads at every zoom without being heavy at city-wide view.
+                const counts: Record<string, number> = countsResp?.counts ?? {};
+                const countsAvailable = countsResp !== null && countsResp.counts !== undefined;
+                setCouncilCountsUnavailable(!countsAvailable);
+
+                // Merge per-district counts into feature properties so Mapbox can read them.
+                // Districts with no events get 0 (avoids a "missing" branch in expressions).
+                const enriched = {
+                    ...geojson,
+                    features: geojson.features.map((f: { properties?: { coundist?: string } }) => ({
+                        ...f,
+                        properties: {
+                            ...f.properties,
+                            flood_count: counts[f.properties?.coundist ?? ''] ?? 0,
+                        },
+                    })),
+                };
+
+                map.current.addSource(COUNCIL_SOURCE, { type: 'geojson', data: enriched });
+
+                // Compute relative gradient stops from the actual data. If counts are unavailable or all zero, fall back to a flat fill (no gradient signal to convey).
+                const allCounts: number[] = enriched.features.map((f: { properties: { flood_count: number } }) => f.properties.flood_count);
+                const maxCount = Math.max(...allCounts, 0);
+                const useGradient = countsAvailable && maxCount > 0;
+
+                // Amber palette — doesn't collide with FEMA's red/blue/purple. The gradient runs from a faint cream (low/no events) to a saturated amber-700 (highest events). Light at the bottom keeps districts with zero readable instead of disappearing.
+                const fillColor = useGradient
+                    ? ([
+                        'interpolate', ['linear'], ['get', 'flood_count'],
+                        0, 'rgba(254,243,199,1)',                // amber-100 (low)
+                        Math.max(maxCount * 0.5, 1), 'rgba(245,158,11,1)',  // amber-500 (mid)
+                        maxCount, 'rgba(146,64,14,1)',           // amber-800 (high)
+                      ] as unknown as string)
+                    : 'rgba(245,158,11,1)'; // flat amber-500 when no data
+
                 map.current.addLayer({
                     id: COUNCIL_FILL,
                     type: 'fill',
                     source: COUNCIL_SOURCE,
                     paint: {
-                        'fill-color': 'rgba(245,158,11,1)', // amber-500
+                        'fill-color': fillColor,
+                        // Slightly higher opacity at low zoom than Phase 1 — counts are the point of the layer now, gradient needs to read from far away.
                         'fill-opacity': [
                             'interpolate', ['linear'], ['zoom'],
-                            9, 0.05,
-                            12, 0.10,
-                            15, 0.15,
+                            9, 0.20,
+                            12, 0.30,
+                            15, 0.35,
                         ],
                     },
                 }, 'waterway-label');
@@ -468,6 +511,36 @@ export function FloodMap({ className }: { className?: string }) {
                         ],
                     },
                 }, 'waterway-label');
+
+                // D6/D8: per-district label "District N — count", hidden below borough-level zoom to avoid 51 overlapping labels at city-wide view.
+                map.current.addLayer({
+                    id: COUNCIL_LABEL,
+                    type: 'symbol',
+                    source: COUNCIL_SOURCE,
+                    minzoom: 11,
+                    layout: {
+                        'text-field': countsAvailable
+                            ? ['format',
+                                ['concat', 'District ', ['get', 'coundist']],
+                                { 'font-scale': 1.0 },
+                                '\n',
+                                {},
+                                ['to-string', ['get', 'flood_count']],
+                                { 'font-scale': 1.2, 'text-color': '#fef3c7' }, // amber-100 — count gets visual weight
+                              ]
+                            : ['concat', 'District ', ['get', 'coundist']],
+                        'text-size': 11,
+                        'text-anchor': 'center',
+                        'text-justify': 'center',
+                        'text-allow-overlap': false,
+                        'text-ignore-placement': false,
+                    },
+                    paint: {
+                        'text-color': '#fbbf24', // amber-400
+                        'text-halo-color': 'rgba(0,0,0,0.85)',
+                        'text-halo-width': 1.5,
+                    },
+                });
             })
             .catch(err => console.error('Council Districts layer error:', err))
             .finally(() => setCouncilLoading(false));
@@ -613,6 +686,13 @@ export function FloodMap({ className }: { className?: string }) {
                     )}
                     Council Districts
                 </button>
+
+                {/* D10: notice when polygons rendered but flood-count fetch failed */}
+                {showCouncilDistricts && councilCountsUnavailable && (
+                    <span className="text-[10px] text-amber-300/80 italic px-1" title="Could not load 30-day flood event counts; districts shown without color grading or counts.">
+                        flood event data unavailable
+                    </span>
+                )}
 
                 {/* FloodNet Full Dashboard Link */}
                 <a
