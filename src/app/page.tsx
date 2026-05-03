@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import './landing.css';
 
-export default function LandingPage() {
+function LandingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [form, setForm] = useState({ name: '', role: '', company: '', email: '', collaborate: '' });
@@ -276,5 +276,13 @@ export default function LandingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense>
+      <LandingPageInner />
+    </Suspense>
   );
 }
