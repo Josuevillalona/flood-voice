@@ -13,6 +13,9 @@ function LandingPageInner() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  // Demo modal
+  const [showDemo, setShowDemo] = useState(false);
+
   // Password gate
   const [showGate, setShowGate] = useState(false);
   const [password, setPassword] = useState('');
@@ -106,7 +109,7 @@ function LandingPageInner() {
             <button className="fv-btn-primary" onClick={handleLaunch}>
               Launch Dashboard →
             </button>
-            <button className="fv-btn-ghost">Watch a demo →</button>
+            <button className="fv-btn-ghost" onClick={() => setShowDemo(true)}>Watch a demo →</button>
           </div>
         </div>
 
@@ -201,6 +204,35 @@ function LandingPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Demo modal */}
+      {showDemo && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(61,79,88,.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          onClick={() => setShowDemo(false)}
+        >
+          <div
+            style={{ width: '100%', maxWidth: '860px', margin: '0 1.5rem', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 32px 80px rgba(61,79,88,.35)', position: 'relative' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowDemo(false)}
+              style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 10, background: 'rgba(0,0,0,.5)', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              ×
+            </button>
+            <div style={{ aspectRatio: '16/9', width: '100%' }}>
+              <iframe
+                src="https://www.youtube.com/embed/RhLhmak1xX0?autoplay=1"
+                title="FloodVoice Demo"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Password gate modal */}
       {showGate && (
