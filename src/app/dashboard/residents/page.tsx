@@ -95,6 +95,7 @@ export default function ResidentsPage() {
         name: '', phone: '', age: '', address: '', zip_code: '', health_conditions: '', language: 'en'
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
     useEffect(() => { fetchResidents(); }, []);
 
@@ -187,8 +188,15 @@ export default function ResidentsPage() {
     };
 
     const handleUpdateStatus = async (id: string, newStatus: Resident['status']) => {
+        if (newStatus === 'distress') {
+            const resident = residents.find(r => r.id === id);
+            if (!confirm(`Mark ${resident?.name} as IN DISTRESS? This will send a Telegram alert.`)) return;
+        }
+        setUpdatingStatusId(id);
         const { error } = await supabase.from('residents').update({ status: newStatus }).eq('id', id);
         if (!error) {
+            // Optimistically update local state so the badge changes immediately
+            setResidents(prev => sortResidents(prev.map(r => r.id === id ? { ...r, status: newStatus } : r)));
             if (newStatus === 'distress') {
                 const resident = residents.find(r => r.id === id);
                 if (resident) {
@@ -201,10 +209,10 @@ export default function ResidentsPage() {
                     } catch (e) { console.error('Failed to send Telegram alert:', e); }
                 }
             }
-            fetchResidents();
         } else {
             alert('Error updating status: ' + error.message);
         }
+        setUpdatingStatusId(null);
     };
 
     return (
@@ -426,19 +434,22 @@ export default function ResidentsPage() {
                                     <div style={{ width: '1px', height: '20px', background: 'rgba(61,79,88,.1)', margin: '0 2px' }} />
 
                                     <button title="Mark Safe" onClick={() => handleUpdateStatus(resident.id, 'safe')}
-                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer' }}
+                                        disabled={updatingStatusId === resident.id}
+                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer', opacity: updatingStatusId === resident.id ? 0.4 : 1 }}
                                         onMouseEnter={e => (e.currentTarget.style.color = '#1A6B7C', e.currentTarget.style.background = 'rgba(26,107,124,.08)')}
                                         onMouseLeave={e => (e.currentTarget.style.color = 'rgba(61,79,88,.35)', e.currentTarget.style.background = 'transparent')}>
                                         <CheckCircle size={14} />
                                     </button>
                                     <button title="Mark Pending" onClick={() => handleUpdateStatus(resident.id, 'pending')}
-                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer' }}
+                                        disabled={updatingStatusId === resident.id}
+                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer', opacity: updatingStatusId === resident.id ? 0.4 : 1 }}
                                         onMouseEnter={e => (e.currentTarget.style.color = '#3D4F58', e.currentTarget.style.background = 'rgba(61,79,88,.08)')}
                                         onMouseLeave={e => (e.currentTarget.style.color = 'rgba(61,79,88,.35)', e.currentTarget.style.background = 'transparent')}>
                                         <Clock size={14} />
                                     </button>
                                     <button title="Mark Distress" onClick={() => handleUpdateStatus(resident.id, 'distress')}
-                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer' }}
+                                        disabled={updatingStatusId === resident.id}
+                                        style={{ padding: '5px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(61,79,88,.35)', cursor: 'pointer', opacity: updatingStatusId === resident.id ? 0.4 : 1 }}
                                         onMouseEnter={e => (e.currentTarget.style.color = '#C4622D', e.currentTarget.style.background = 'rgba(196,98,45,.08)')}
                                         onMouseLeave={e => (e.currentTarget.style.color = 'rgba(61,79,88,.35)', e.currentTarget.style.background = 'transparent')}>
                                         <Waves size={14} />

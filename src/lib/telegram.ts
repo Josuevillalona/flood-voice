@@ -31,14 +31,24 @@ export async function sendTelegramMessage(chatId: number | string, text: string,
     }
 }
 
-export async function sendDistressAlert(chatId: number | string, residentName: string, residentId: string) {
-    const message = `🚨 <b>DISTRESS ALERT</b>\n\n` +
-        `Resident: <b>${residentName}</b>\n` +
-        `Status: <b>IN DISTRESS</b>\n\n` +
-        `⚠️ Immediate action required.\n\n` +
-        `View dashboard: ${APP_URL}/dashboard/residents`;
+export async function sendDistressAlert(
+    chatId: number | string,
+    residentName: string,
+    residentId: string,
+    address?: string,
+    healthConditions?: string,
+) {
+    const lines = [
+        `🚨 <b>DISTRESS ALERT</b>\n`,
+        `Resident: <b>${residentName}</b>`,
+        `Status: <b>IN DISTRESS</b>`,
+    ];
+    if (address) lines.push(`Address: <b>${address}</b>`);
+    if (healthConditions) lines.push(`Health: ${healthConditions}`);
+    lines.push(`\n⚠️ Immediate action required.\n`);
+    lines.push(`View dashboard: ${APP_URL}/dashboard/residents`);
 
-    return sendTelegramMessage(chatId, message);
+    return sendTelegramMessage(chatId, lines.join('\n'));
 }
 
 export async function sendFloodAlert(chatId: number | string, sensorName: string, depth: number) {

@@ -210,8 +210,10 @@ export async function POST(request: Request) {
                 }
             };
 
-            // Update local status to 'pending'/'calling'
-            await supabase.from('residents').update({ status: 'pending' }).eq('id', resident.id);
+            // Update local status to 'pending'/'calling' — but preserve 'distress' so manual flags aren't wiped
+            if (resident.status !== 'distress') {
+                await supabase.from('residents').update({ status: 'pending' }).eq('id', resident.id);
+            }
 
             const response = await fetch(VAPI_URL, {
                 method: 'POST',

@@ -10,10 +10,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // Get the resident's liaison_id
+        // Get the resident's liaison_id, address, and health conditions
         const { data: resident } = await supabase
             .from('residents')
-            .select('liaison_id')
+            .select('liaison_id, address, health_conditions')
             .eq('id', residentId)
             .single();
 
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         }
 
         // Send the alert
-        await sendDistressAlert(targetChatId, residentName, residentId);
+        await sendDistressAlert(targetChatId, residentName, residentId, resident?.address, resident?.health_conditions);
 
         return NextResponse.json({
             success: true,
