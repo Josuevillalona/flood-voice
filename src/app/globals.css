@@ -286,7 +286,7 @@ body {
 .light .hover\:bg-white\/10:hover { background-color: rgba(15, 23, 42, 0.06) !important; }
 
 /* ---- Sidebar ---- */
-.light aside {
+.light aside:not(.db-sidebar) {
   background: rgba(255, 255, 255, 0.95) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
 }
